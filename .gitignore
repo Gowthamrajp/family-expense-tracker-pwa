@@ -35,3 +35,6 @@ ui-debug.log
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# Playwright MCP session artifacts
+.playwright-mcp/
