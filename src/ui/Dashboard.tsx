@@ -60,12 +60,13 @@ const LOAD_ERROR_MESSAGE = 'Dashboard data could not be loaded.';
 /**
  * Format a monetary amount as currency for display.
  *
- * Uses USD as the MVP's single currency (multi-currency is out of scope),
- * matching the expense list's formatting.
+ * Uses INR as the MVP's single currency (multi-currency is out of scope),
+ * matching the expense list's formatting. The `en-IN` locale renders the
+ * rupee symbol with Indian digit grouping (e.g. ₹1,00,000.00).
  */
-const currencyFormatter = new Intl.NumberFormat(undefined, {
+const currencyFormatter = new Intl.NumberFormat('en-IN', {
   style: 'currency',
-  currency: 'USD',
+  currency: 'INR',
 });
 
 function formatAmount(amount: number): string {
