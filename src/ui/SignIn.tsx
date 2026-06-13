@@ -23,6 +23,7 @@
 import { Navigate } from 'react-router-dom';
 
 import { useAuth } from '../state/AuthProvider';
+import { InstallInstructions } from './InstallInstructions';
 
 /** Message shown when a sign-in attempt fails or times out (Req 1.4, 1.8). */
 const SIGN_IN_ERROR_MESSAGE =
@@ -90,6 +91,13 @@ export function SignIn(): JSX.Element {
       >
         {isSigningIn ? 'Signing in…' : 'Sign in with Google'}
       </button>
+
+      {/*
+        Install affordance for unauthenticated visitors. On iOS Safari there is
+        no automatic install popup (the platform does not support it), so we
+        always offer manual "Add to Home Screen" steps here.
+      */}
+      <InstallInstructions />
     </main>
   );
 }
