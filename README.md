@@ -3,13 +3,16 @@
 A Progressive Web App for a small group of family members to record expenses and
 review spending through a visual dashboard.
 
+**Live app:** https://family-expense-tracker-d119a.web.app
+
 ## Overview
 
 - **Stack:** React + Vite + TypeScript.
 - **Backend:** Firebase — Authentication (Google sign-in) and Cloud Firestore.
 - **Charts:** Recharts (category, source, and monthly visualizations).
 - **PWA:** `vite-plugin-pwa` (Workbox) generates the web app manifest and a
-  precaching service worker for the app shell.
+  precaching service worker for the app shell, with forced over-the-air (OTA)
+  updates so every device always runs the latest deployed version.
 - **Hosting:** Firebase Hosting serves the static `dist` build; Firestore
   Security Rules (`firestore.rules`) enforce access control on the server side.
 
@@ -121,6 +124,50 @@ Firebase Hosting serves the static `dist` build, and `firestore.rules` is
 deployed alongside it. Hosting releases are atomic: if a deploy fails, the
 previously deployed version keeps serving and the CLI reports the failure
 reason.
+
+## Install the app (Add to Home Screen)
+
+The app is installable on phones, tablets, and desktops. Once installed it opens
+in its own window like a native app. When the browser detects the app is
+installable it shows an **Install app** button in the header; you can also use
+the **How to install** button for step-by-step guidance. Manual steps per
+platform:
+
+### iPhone / iPad (Safari)
+
+1. Open https://family-expense-tracker-d119a.web.app in **Safari**.
+2. Tap the **Share** button (the square with an upward arrow).
+3. Scroll down and tap **Add to Home Screen**.
+4. Tap **Add** in the top-right corner.
+
+### Android (Chrome)
+
+1. Open the app in **Chrome**.
+2. Tap the **Install app** button, or open the browser menu (⋮).
+3. Tap **Install app** / **Add to Home screen** and confirm with **Install**.
+
+### Desktop (Chrome or Edge)
+
+1. Open the app in **Chrome** or **Edge**.
+2. Click the **Install app** button, or the install icon in the address bar.
+3. Alternatively, open the browser menu (⋮) and choose **Install Family Expense
+   Tracker**, then confirm with **Install**.
+
+## Automatic updates (OTA)
+
+The app force-updates over the air, so users never have to manually clear a
+cache or reinstall to get the latest version:
+
+- The service worker is configured with `registerType: 'autoUpdate'`, so a newly
+  deployed worker activates immediately (`skipWaiting` + `clientsClaim`).
+- When the new worker takes control, the open page reloads automatically to load
+  the fresh build (see `src/pwa.ts`).
+- A long-lived session proactively checks for new versions every 15 minutes,
+  whenever the tab regains focus, and whenever the network is restored.
+
+To ship an update, just build and deploy (see [Deploy](#deploy)) — open clients
+pick it up automatically within a few minutes (or immediately on their next
+visit / tab focus).
 
 ## Project structure
 

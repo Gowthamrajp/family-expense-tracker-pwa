@@ -26,6 +26,7 @@ import { NavLink, Outlet, type To } from 'react-router-dom';
 import { useAuth } from '../state/AuthProvider';
 import { useConnectivity } from '../state/useConnectivity';
 import { usePwaStatus } from '../state/usePwaStatus';
+import { InstallInstructions } from './InstallInstructions';
 import { InstallPrompt } from './InstallPrompt';
 
 /** Props for {@link AppShell}. */
@@ -121,6 +122,8 @@ export function AppShell({ children, isOffline }: AppShellProps): JSX.Element {
         <div style={memberAreaStyle}>
           {/* Install affordance, shown only when the app is installable (Req 5.4). */}
           <InstallPrompt />
+          {/* Cross-platform manual install steps (covers iOS Safari etc., Req 5.4). */}
+          <InstallInstructions />
           {/* Resolved member label: displayName ?? email ?? 'Signed in' (Req 1.5). */}
           <span data-testid="member-label">{memberLabel ?? 'Signed in'}</span>
           {/* Sign-out control ends the Session (Req 1.6). */}
