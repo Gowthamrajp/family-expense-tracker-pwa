@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor / OS
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Test / coverage
+coverage/
+
+# Firebase credentials and environment secrets (Req 7.6)
+.env
+.env.*
+!.env.example
+serviceAccount*.json
+*serviceAccountKey*.json
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+
+# TypeScript incremental build info
+*.tsbuildinfo

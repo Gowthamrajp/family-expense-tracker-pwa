@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /expenses/{expenseId} {
+      // Req 6.1: only authenticated family members may read expenses.
+      allow read: if request.auth != null;
+
+      // Req 6.2: only authenticated family members may create expenses, and a
+      // created document must attribute itself to the authenticated caller.
+      allow create: if request.auth != null
+                    && request.resource.data.recordedBy == request.auth.uid;
+
+      // Editing/deleting expenses is out of scope for the MVP.
+      allow update, delete: if false;
+    }
+  }
+}
