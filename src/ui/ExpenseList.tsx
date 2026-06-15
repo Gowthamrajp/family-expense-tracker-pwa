@@ -1,21 +1,29 @@
 /**
- * Expense list screen (Req 3.1–3.9).
+ * Expense list screen (Req 3.1–3.9, 6.1–6.3).
  *
  * `ExpenseList` renders the family group's recorded expenses, retrieved live
  * via {@link useExpenses}. The hook subscribes to the Firestore real-time
  * listener while a Session is active, returns the data already ordered by
- * Expense date most-recent first (Req 3.4), and surfaces loading/ready/error
- * status with a `retry` control.
+ * Expense date most-recent first (Req 3.4, 6.1), and surfaces
+ * loading/ready/error status with a `retry` control.
  *
- * Behavior by status:
+ * Each stored expense references its Category and (optionally) SubSource by id;
+ * the family's {@link useCategories} and {@link useSubSources} subscriptions
+ * supply the lookup data so {@link resolveLabels} can project each expense into
+ * a display-ready {@link ExpenseRow} with the resolved Category name, the
+ * SubSource nickname when present, and the denormalized recording member
+ * (Req 6.2, 6.3).
+ *
+ * Behavior by status (driven by the expense subscription):
  *
  * - `loading` — show a loading indicator until retrieval completes or fails
  *   (Req 3.7).
  * - `ready` with expenses — render the ordered list; each row shows the
- *   monetary amount, Category name, Source name, Expense date, and description
- *   text, leaving the description blank when empty (Req 3.1, 3.2, 3.3, 3.4).
- *   New expenses stored during the Session appear without a manual reload
- *   because the hook stays subscribed (Req 3.5).
+ *   monetary amount, Category name, Source name, SubSource nickname when
+ *   present, the recording Family_Member, Expense date, and description text,
+ *   leaving the description blank when empty (Req 6.2, 6.3). New expenses
+ *   stored during the Session appear without a manual reload because the hook
+ *   stays subscribed (Req 3.5).
  * - `ready` with no expenses — show an empty-state message (Req 3.6).
  * - `error` — show an error message plus a retry control that re-attempts the
  *   retrieval via `retry()`; any previously displayed data is retained by the
@@ -24,7 +32,9 @@
  * Styling is intentionally minimal/inline for the MVP.
  */
 import { useExpenses } from '../state/useExpenses';
-import type { Expense } from '../domain/types';
+import { useCategories } from '../state/useCategories';
+import { useSubSources } from '../state/useSubSources';
+import { resolveLabels, type ExpenseRow } from '../domain/expenseMapper';
 
 /** Message shown when no expenses exist for the family group (Req 3.6). */
 const EMPTY_STATE_MESSAGE = 'No expenses have been recorded yet.';
@@ -89,6 +99,11 @@ const metaStyle: React.CSSProperties = {
   color: '#444',
 };
 
+const recordedByStyle: React.CSSProperties = {
+  color: '#555',
+  fontStyle: 'italic',
+};
+
 const dateStyle: React.CSSProperties = {
   color: '#666',
   marginLeft: 'auto',
@@ -110,17 +125,28 @@ const containerStyle: React.CSSProperties = {
   gap: '1rem',
 };
 
-/** Props for {@link ExpenseRow}. */
-interface ExpenseRowProps {
-  expense: Expense;
+/** Props for {@link ExpenseListRow}. */
+interface ExpenseListRowProps {
+  row: ExpenseRow;
 }
 
 /**
- * Render a single expense as a list row showing amount, Category, Source,
+ * Render a single resolved expense as a list row showing amount, Category
+ * name, Source name, SubSource nickname (when present), recording member,
  * date, and description (blank when empty).
+ *
+ * Validates: Requirements 6.2, 6.3
  */
-function ExpenseRow({ expense }: ExpenseRowProps): JSX.Element {
-  const { amount, category, source, date, description } = expense;
+function ExpenseListRow({ row }: ExpenseListRowProps): JSX.Element {
+  const {
+    amount,
+    categoryName,
+    sourceName,
+    subSourceNickname,
+    recordedByName,
+    date,
+    description,
+  } = row;
 
   return (
     <li data-testid="expense-row" style={rowStyle}>
@@ -128,16 +154,29 @@ function ExpenseRow({ expense }: ExpenseRowProps): JSX.Element {
         {formatAmount(amount)}
       </span>
       <span data-testid="expense-category" style={metaStyle}>
-        {category}
+        {categoryName}
       </span>
       <span data-testid="expense-source" style={metaStyle}>
-        {source}
+        {sourceName}
+      </span>
+      {/*
+        SubSource nickname is shown only when the expense references a known
+        sub-source (Req 6.2). It is omitted entirely otherwise so the row is
+        not cluttered with an empty field.
+      */}
+      {subSourceNickname !== undefined && (
+        <span data-testid="expense-subsource" style={metaStyle}>
+          {subSourceNickname}
+        </span>
+      )}
+      <span data-testid="expense-recordedby" style={recordedByStyle}>
+        {recordedByName}
       </span>
       <span data-testid="expense-date" style={dateStyle}>
         {formatDate(date)}
       </span>
       {/*
-        Description is shown when present and left blank when empty (Req 3.3).
+        Description is shown when present and left blank when empty (Req 6.3).
         The element is always rendered so the row layout is stable; its text
         content is the empty string for descriptionless expenses.
       */}
@@ -151,22 +190,39 @@ function ExpenseRow({ expense }: ExpenseRowProps): JSX.Element {
 /**
  * Render the recorded-expense list with loading, empty, and error states.
  *
- * @param familyId - The active family's id, forwarded to {@link useExpenses}.
- *   Defaults to `null` until the `FamilyProvider`/routing wiring lands
- *   (tasks 28.4/31), at which point the active family id is passed in.
+ * @param familyId - The active family's id, forwarded to {@link useExpenses},
+ *   {@link useCategories}, and {@link useSubSources} so the rendered rows can
+ *   resolve Category/SubSource ids to display labels. Defaults to `null` until
+ *   the `FamilyProvider`/routing wiring lands (tasks 28.4/31), at which point
+ *   the active family id is passed in.
  * @param active - Whether a Session is active; forwarded to {@link useExpenses}.
  *   Defaults to `true` (the hook's own default), matching the guarded route
  *   where this screen is only mounted within an active Session.
  *
- * Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9
+ * Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 6.1, 6.2, 6.3
  */
 export function ExpenseList({
   familyId = null,
   active = true,
 }: { familyId?: string | null; active?: boolean } = {}): JSX.Element {
-  // SHIM (tasks 28.4/31): `familyId` defaults to `null` so the hook stays idle
+  // SHIM (tasks 28.4/31): `familyId` defaults to `null` so the hooks stay idle
   // until `useFamily` supplies the active family id.
   const { expenses, status, retry } = useExpenses(familyId, active);
+
+  // Family categories and sub-sources supply the lookup data used to resolve
+  // each expense's stored `categoryId`/`subSourceId` references to display
+  // labels (Req 6.2, 6.3). Their own loading/error status does not gate the
+  // expense list: `resolveLabels` falls back to the legacy `category` string
+  // and omits the sub-source nickname when the lookup data is unavailable.
+  const { categories } = useCategories(familyId);
+  const { subSources } = useSubSources(familyId);
+
+  // Project each expense into a display-ready row with resolved labels. Kept
+  // inline (cheap, recomputed per snapshot) so rows always reflect the latest
+  // expense, category, and sub-source data delivered by the live subscriptions.
+  const rows = expenses.map((expense) =>
+    resolveLabels(expense, categories, subSources),
+  );
 
   return (
     <section data-screen="expenses" aria-label="Recorded expenses" style={containerStyle}>
@@ -193,15 +249,15 @@ export function ExpenseList({
       )}
 
       {/* Empty state once a successful read returns no expenses (Req 3.6). */}
-      {status === 'ready' && expenses.length === 0 && (
+      {status === 'ready' && rows.length === 0 && (
         <p data-testid="expense-empty">{EMPTY_STATE_MESSAGE}</p>
       )}
 
-      {/* Ordered expense list (Req 3.1, 3.2, 3.4). */}
-      {expenses.length > 0 && (
+      {/* Ordered expense list (Req 3.1, 3.2, 3.4, 6.1, 6.2, 6.3). */}
+      {rows.length > 0 && (
         <ul style={listStyle}>
-          {expenses.map((expense) => (
-            <ExpenseRow key={expense.id} expense={expense} />
+          {rows.map((row) => (
+            <ExpenseListRow key={row.id} row={row} />
           ))}
         </ul>
       )}

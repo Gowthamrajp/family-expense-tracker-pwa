@@ -350,27 +350,27 @@ design Properties 9–13 with fast-check (minimum 100 iterations, tagged
 - [x] 29. Checkpoint - expansion data and state layers
   - Ensure build/typecheck and any added tests pass.
 
-- [ ] 30. Implement family onboarding and settings UI
-  - [ ] 30.1 Implement `CreateJoinFamily` screen (create-new action and join-by-invite-code form with invalid-code messaging)
+- [x] 30. Implement family onboarding and settings UI
+  - [x] 30.1 Implement `CreateJoinFamily` screen (create-new action and join-by-invite-code form with invalid-code messaging)
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
-  - [ ] 30.2 Implement `FamilySettings` screen (member list + shareable invite code), with `CategoryManager` (add category, empty/duplicate validation) and `SubSourceManager` (add sub-source per source, nickname + optional last-4 validation)
+  - [x] 30.2 Implement `FamilySettings` screen (member list + shareable invite code), with `CategoryManager` (add category, empty/duplicate validation) and `SubSourceManager` (add sub-source per source, nickname + optional last-4 validation)
     - _Requirements: 2.6, 4.2, 4.3, 4.4, 4.5, 5.1, 5.2, 5.3, 5.5_
 
-- [ ] 31. Revise expense/list/dashboard UI for family data
-  - [ ] 31.1 Revise `ExpenseEntryForm`: category select populated from family categories; optional sub-source select shown only when the selected source has sub-sources
+- [x] 31. Revise expense/list/dashboard UI for family data
+  - [x] 31.1 Revise `ExpenseEntryForm`: category select populated from family categories; optional sub-source select shown only when the selected source has sub-sources
     - _Requirements: 3.1, 3.2, 3.5, 3.7, 3.8_
-  - [ ] 31.2 Revise `ExpenseList` rows to show the sub-source nickname when present and the recording member; resolve category id→name
+  - [x] 31.2 Revise `ExpenseList` rows to show the sub-source nickname when present and the recording member; resolve category id→name
     - _Requirements: 6.1, 6.2, 6.3_
-  - [ ] 31.3 Confirm `Dashboard` reads family-scoped data and resolves category labels (aggregation unchanged)
+  - [x] 31.3 Confirm `Dashboard` reads family-scoped data and resolves category labels (aggregation unchanged)
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
 
-- [ ] 32. Wire routing, family gating, and migration trigger
-  - [ ] 32.1 Add `RequireFamily` guard and routes `/family` (create-or-join) and `/settings`; mount `FamilyProvider`; redirect authed members with no family to `/family`; add Settings to `AppShell` nav
+- [x] 32. Wire routing, family gating, and migration trigger
+  - [x] 32.1 Add `RequireFamily` guard and routes `/family` (create-or-join) and `/settings`; mount `FamilyProvider`; redirect authed members with no family to `/family`; add Settings to `AppShell` nav
     - _Requirements: 1.11, 2.7_
-  - [ ] 32.2 Wire the one-time migration trigger into first-family creation and surface a migration-failure indication when an expense cannot be mapped
+  - [x] 32.2 Wire the one-time migration trigger into first-family creation and surface a migration-failure indication when an expense cannot be mapped
     - _Requirements: 10.1, 10.5_
 
-- [ ] 33. Final checkpoint - build, test, and deploy the expansion
+- [-] 33. Final checkpoint - build, test, and deploy the expansion
   - Run build, typecheck, and the test suite; deploy the updated Firestore rules (`firebase deploy --only firestore:rules`) and Hosting (`firebase deploy --only hosting`); verify create/join family, add category, add sub-source, record a family-scoped expense, and confirm migration preserved existing data.
   - _Requirements: 9.1, 10.1, 11.2_
 

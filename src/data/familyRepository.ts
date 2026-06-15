@@ -41,6 +41,7 @@ import type {
   FamilyDocument,
   FamilyMember,
   LegacyExpenseDocument,
+  MigrationFailure,
 } from '../domain/types';
 import { firestore } from './firebase';
 
@@ -84,6 +85,26 @@ class InviteCodeCollisionError extends Error {
 }
 
 /**
+ * Outcome of {@link FamilyRepository.createFamily}: the created family plus any
+ * legacy expenses that could not be migrated into it.
+ *
+ * Migration runs once, on first-family creation, and is non-fatal: a family is
+ * always created even if some legacy expenses cannot be mapped. The
+ * `migrationFailures` list lets the state/UI layers surface a non-fatal
+ * migration-failure indication identifying the affected expenses (Req 10.5).
+ */
+export interface CreateFamilyResult {
+  /** The newly created family. */
+  family: Family;
+  /**
+   * Legacy expenses left unchanged because they could not be migrated, each
+   * identified by its original id with a reason. Empty when nothing failed (or
+   * when there were no legacy expenses to migrate).
+   */
+  migrationFailures: MigrationFailure[];
+}
+
+/**
  * Data-layer contract for families, membership, and the routing document.
  * Mirrors the design's `FamilyRepository` interface.
  */
@@ -94,9 +115,12 @@ export interface FamilyRepository {
    * and (first family only, best-effort) migrate the creator's legacy
    * top-level expenses.
    *
-   * Validates: Requirements 2.2, 4.1, 10.1
+   * Resolves with the created family and any legacy expenses that could not be
+   * migrated (Req 10.5); migration never aborts family creation.
+   *
+   * Validates: Requirements 2.2, 4.1, 10.1, 10.5
    */
-  createFamily(creator: FamilyMember, name?: string): Promise<Family>;
+  createFamily(creator: FamilyMember, name?: string): Promise<CreateFamilyResult>;
 
   /**
    * Resolve a family by invite code and join the caller, appending them to
@@ -221,14 +245,14 @@ async function migrateLegacyExpenses(
   familyId: string,
   creator: FamilyMember,
   seededCategories: FamilyCategory[],
-): Promise<{ legacyId: string; reason: string }[]> {
+): Promise<MigrationFailure[]> {
   const legacy = await readLegacyExpensesForCreator(creator.uid);
   if (legacy.length === 0) {
     return [];
   }
 
   const plan = planMigration(legacy, seededCategories);
-  const failures: { legacyId: string; reason: string }[] = [...plan.failures];
+  const failures: MigrationFailure[] = [...plan.failures];
 
   // Create categories the plan says are missing, accumulating a
   // normalized-name -> id map seeded with the existing family categories.
@@ -310,7 +334,10 @@ async function migrateLegacyExpenses(
  * Live {@link FamilyRepository} backed by the initialized Firestore instance.
  */
 export const familyRepository: FamilyRepository = {
-  async createFamily(creator: FamilyMember, name?: string): Promise<Family> {
+  async createFamily(
+    creator: FamilyMember,
+    name?: string,
+  ): Promise<CreateFamilyResult> {
     const familyRef = doc(collection(firestore, FAMILIES_COLLECTION));
     const userRef = doc(firestore, USERS_COLLECTION, creator.uid);
 
@@ -359,40 +386,50 @@ export const familyRepository: FamilyRepository = {
     // Seed default categories (Req 4.1), then run best-effort, idempotent
     // migration of legacy expenses (Req 10.1). Neither aborts family creation.
     const seededCategories = await seedDefaultCategories(familyRef.id);
+    let migrationFailures: MigrationFailure[] = [];
     try {
-      const failures = await migrateLegacyExpenses(
+      migrationFailures = await migrateLegacyExpenses(
         familyRef.id,
         creator,
         seededCategories,
       );
-      if (failures.length > 0) {
+      if (migrationFailures.length > 0) {
         // Surface migration failures without losing the family (Req 10.5).
         console.warn(
-          `Family ${familyRef.id} created, but ${failures.length} legacy expense(s) could not be migrated:`,
-          failures,
+          `Family ${familyRef.id} created, but ${migrationFailures.length} legacy expense(s) could not be migrated:`,
+          migrationFailures,
         );
       }
     } catch (error) {
-      // Migration is non-fatal to family creation (Req 10.5).
+      // Migration is non-fatal to family creation (Req 10.5). A wholesale
+      // migration failure (e.g. the legacy read was denied) is surfaced as a
+      // single failure entry so the UI can still indicate something went wrong.
       console.warn(
         `Family ${familyRef.id} created, but legacy expense migration failed:`,
         error,
       );
+      migrationFailures = [
+        {
+          legacyId: '*',
+          reason: error instanceof Error ? error.message : String(error),
+        },
+      ];
     }
 
     // Read the family back to return a materialized createdAt timestamp.
     const familySnap = await getDoc(familyRef);
     const data = familySnap.data();
-    if (data !== undefined) {
-      return toFamily(familyRef.id, data);
-    }
-    return {
-      id: familyRef.id,
-      name: name ?? null,
-      inviteCode,
-      createdAt: new Date(),
-      memberUids: [creator.uid],
-    };
+    const family =
+      data !== undefined
+        ? toFamily(familyRef.id, data)
+        : {
+            id: familyRef.id,
+            name: name ?? null,
+            inviteCode,
+            createdAt: new Date(),
+            memberUids: [creator.uid],
+          };
+    return { family, migrationFailures };
   },
 
   async joinFamilyByInviteCode(

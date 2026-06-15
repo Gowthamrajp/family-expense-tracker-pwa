@@ -43,13 +43,14 @@ import {
 } from 'recharts';
 
 import { useExpenses } from '../state/useExpenses';
+import { useCategories } from '../state/useCategories';
 import {
   groupByCategory,
   groupByMonth,
   groupBySource,
   totalAmount,
 } from '../domain/aggregation';
-import type { GroupTotal } from '../domain/types';
+import type { Expense, GroupTotal } from '../domain/types';
 
 /** Message shown when no expenses exist for the family group (Req 4.6). */
 const EMPTY_STATE_MESSAGE = 'No expenses have been recorded yet.';
@@ -156,11 +157,37 @@ export function Dashboard({
   // until `useFamily` supplies the active family id.
   const { expenses, status, retry } = useExpenses(familyId, active);
 
+  // Family-scoped categories, used to resolve each Expense's `categoryId` to a
+  // human-readable Category name for the by-category chart (Req 7.2). The hook
+  // shares the same family scope as `useExpenses`, so the labels stay in sync.
+  const { categories } = useCategories(familyId);
+
+  // Map categoryId -> display name so the category chart shows real family
+  // Category names rather than ids. Recomputes when the category list changes,
+  // keeping labels live as categories are added/renamed (Req 7.5).
+  const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
+
+  // Derive a category-resolved view of the expenses for the by-category
+  // grouping only: replace `category` with the resolved Category name when the
+  // expense's `categoryId` maps to a known family Category, otherwise keep the
+  // existing legacy `category` string. Source/month/total inputs are unchanged.
+  const categoryResolvedExpenses: Expense[] = expenses.map((expense) => {
+    const resolvedName =
+      expense.categoryId !== undefined
+        ? categoryNameById.get(expense.categoryId)
+        : undefined;
+    return resolvedName === undefined
+      ? expense
+      : { ...expense, category: resolvedName as Expense['category'] };
+  });
+
   // Aggregations recompute on every render from the current expenses, so the
   // total and charts always reflect the latest snapshot delivered by the live
-  // subscription (Req 4.5).
+  // subscription (Req 7.5). Only the category grouping uses the resolved names;
+  // total, source, and month grouping are computed from the raw expenses so
+  // their aggregation is unchanged (Req 7.1, 7.3, 7.4).
   const total = totalAmount(expenses);
-  const byCategory = groupByCategory(expenses);
+  const byCategory = groupByCategory(categoryResolvedExpenses);
   const bySource = groupBySource(expenses);
   const byMonth = groupByMonth(expenses);
 

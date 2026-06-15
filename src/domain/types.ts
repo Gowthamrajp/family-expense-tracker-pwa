@@ -316,7 +316,19 @@ export interface MigrationPlan {
     familyExpense: ExpenseInput & { recordedBy: string; createdAt: Date };
   }[];
   /** Unmappable legacy expenses left untouched, with a reason (Req 10.5). */
-  failures: { legacyId: string; reason: string }[];
+  failures: MigrationFailure[];
+}
+
+/**
+ * A single legacy expense that could not be migrated into the first family,
+ * identified by its original id with a human-readable reason. Surfaced to the
+ * UI as a non-fatal migration-failure indication (Req 10.5).
+ */
+export interface MigrationFailure {
+  /** The original (legacy) expense document id that was left unchanged. */
+  legacyId: string;
+  /** Why the expense could not be mapped/migrated. */
+  reason: string;
 }
 
 /**

@@ -41,7 +41,7 @@ import {
   familyRepository as defaultFamilyRepository,
   type FamilyRepository,
 } from '../data/familyRepository';
-import type { Family, FamilyMember } from '../domain/types';
+import type { Family, FamilyMember, MigrationFailure } from '../domain/types';
 import { useAuth } from './AuthProvider';
 
 /**
@@ -63,6 +63,15 @@ export interface UseFamilyResult {
   members: FamilyMember[];
   /** Derived membership status. */
   status: FamilyStatus;
+  /**
+   * Legacy expenses that could not be migrated when this member created the
+   * first family (Req 10.5). Empty unless a just-completed `createFamily`
+   * reported failures; the create-or-join screen surfaces a non-fatal notice
+   * when non-empty. Cleared via {@link dismissMigrationFailures}.
+   */
+  migrationFailures: MigrationFailure[];
+  /** Dismiss the migration-failure notice surfaced after create (Req 10.5). */
+  dismissMigrationFailures: () => void;
   /**
    * Create a new family, generate a unique invite code, and add the current
    * member; on success the provider transitions to `ready` (Req 2.2).
@@ -104,6 +113,10 @@ export function FamilyProvider({
   const [family, setFamily] = useState<Family | null>(null);
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [status, setStatus] = useState<FamilyStatus>('loading');
+  // Migration failures reported by the most recent createFamily (Req 10.5).
+  const [migrationFailures, setMigrationFailures] = useState<MigrationFailure[]>(
+    [],
+  );
 
   // Identifies the in-flight resolution/action so a result that arrives after
   // the Session changed (or a newer action started) is ignored. Bumped on every
@@ -121,6 +134,7 @@ export function FamilyProvider({
     if (authStatus !== 'authenticated' || member === null) {
       setFamily(null);
       setMembers([]);
+      setMigrationFailures([]);
       setStatus('loading');
       return;
     }
@@ -171,13 +185,15 @@ export function FamilyProvider({
       resolutionRef.current = resolutionId;
 
       const created = await familyRepository.createFamily(member, name);
-      const familyMembers = await familyRepository.listMembers(created.id);
+      const familyMembers = await familyRepository.listMembers(created.family.id);
       // A Session change during the create supersedes this result.
       if (resolutionRef.current !== resolutionId) {
         return;
       }
-      setFamily(created);
+      setFamily(created.family);
       setMembers(familyMembers);
+      // Surface any legacy expenses that could not be migrated (Req 10.5).
+      setMigrationFailures(created.migrationFailures);
       setStatus('ready');
     },
     [familyRepository, member],
@@ -209,9 +225,29 @@ export function FamilyProvider({
     [familyRepository, member],
   );
 
+  const dismissMigrationFailures = useCallback((): void => {
+    setMigrationFailures([]);
+  }, []);
+
   const value = useMemo<UseFamilyResult>(
-    () => ({ family, members, status, createFamily, joinFamily }),
-    [family, members, status, createFamily, joinFamily],
+    () => ({
+      family,
+      members,
+      status,
+      migrationFailures,
+      dismissMigrationFailures,
+      createFamily,
+      joinFamily,
+    }),
+    [
+      family,
+      members,
+      status,
+      migrationFailures,
+      dismissMigrationFailures,
+      createFamily,
+      joinFamily,
+    ],
   );
 
   return (
