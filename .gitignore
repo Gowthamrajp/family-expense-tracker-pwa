@@ -38,3 +38,6 @@ ui-debug.log
 
 # Playwright MCP session artifacts
 .playwright-mcp/
+
+# Local admin/migration secrets and data dumps (never commit)
+.secrets/
