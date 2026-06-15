@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    background-color: #0d0e0f;
+  }
+
+  body {
+    background-color: #0d0e0f;
+    color: #e4e2e3;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Material Symbols Outlined base sizing/weight. */
+  .material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal;
+    font-style: normal;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    font-variation-settings:
+      'FILL' 0,
+      'wght' 400,
+      'GRAD' 0,
+      'opsz' 24;
+  }
+}
+
+@layer components {
+  /* Core glass tile (DESIGN.md: 24px radius, hairline border, backdrop blur). */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 24px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-card-hover:hover {
+    border-color: rgba(0, 245, 255, 0.3);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  /* Cyan text bloom for hero numbers / wordmark. */
+  .neon-glow {
+    text-shadow: 0 0 10px rgba(0, 245, 255, 0.5);
+  }
+
+  /* Cyan outer bloom for elevated/active controls. */
+  .neon-border {
+    box-shadow: 0 0 15px rgba(0, 245, 255, 0.2);
+  }
+
+  .neon-border-hover:hover {
+    box-shadow: 0 0 20px rgba(0, 245, 255, 0.45);
+  }
+
+  /* Primary action button: cyan fill, dark text, subtle glow. */
+  .btn-primary {
+    background-color: #00f5ff;
+    color: #003739;
+    font-weight: 700;
+    border-radius: 0.75rem;
+    box-shadow: 0 0 15px rgba(0, 245, 255, 0.2);
+    transition: all 0.2s ease;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    box-shadow: 0 0 20px rgba(0, 245, 255, 0.45);
+    opacity: 0.95;
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Ghost / secondary button: outlined cyan. */
+  .btn-ghost {
+    background-color: transparent;
+    color: #00f5ff;
+    border: 1px solid rgba(0, 245, 255, 0.3);
+    border-radius: 0.75rem;
+    transition: all 0.2s ease;
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background-color: rgba(0, 245, 255, 0.1);
+  }
+
+  .btn-ghost:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Ghost input: transparent surface, subtle border, cyan focus ring. */
+  .ghost-input {
+    background-color: #1b1c1d;
+    border: 1px solid rgba(132, 148, 149, 0.3);
+    border-radius: 0.75rem;
+    color: #e4e2e3;
+    transition: all 0.2s ease;
+  }
+
+  .ghost-input::placeholder {
+    color: #849495;
+  }
+
+  .ghost-input:focus {
+    outline: none;
+    border-color: #00f5ff;
+    box-shadow: 0 0 0 1px rgba(0, 245, 255, 0.4);
+  }
+
+  .ghost-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+/* Thin cyan-tinted scrollbar for scroll regions. */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 245, 255, 0.2);
+  border-radius: 10px;
+}

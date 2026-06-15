@@ -23,8 +23,6 @@
  *   save-failed error is shown and all entered values are retained so the
  *   member can retry (Req 3.12);
  * - on success, shows a confirmation indication and clears all fields (Req 3.11).
- *
- * Styling is intentionally minimal/inline for the MVP.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -57,6 +55,9 @@ const SAVE_FAILED_MESSAGE =
 /** Message shown when an expense is stored successfully (Req 3.11). */
 const SAVE_SUCCESS_MESSAGE = 'Expense saved.';
 
+/** Shared classes for ghost form controls (inputs, selects, textarea). */
+const CONTROL_CLASS = 'ghost-input px-3 py-2.5 text-body-md w-full';
+
 /**
  * Raw, controlled values captured from the form. `category` holds the selected
  * family {@link FamilyCategory} id (Req 3.2); `subSource` holds the selected
@@ -87,50 +88,6 @@ type SaveState =
   | { kind: 'saving' }
   | { kind: 'success' }
   | { kind: 'error' };
-
-const formStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '1rem',
-  maxWidth: '28rem',
-  padding: '1.5rem',
-};
-
-const fieldStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.25rem',
-};
-
-const controlStyle: React.CSSProperties = {
-  padding: '0.5rem',
-  fontSize: '1rem',
-};
-
-const fieldErrorStyle: React.CSSProperties = {
-  color: '#b00020',
-  fontSize: '0.875rem',
-};
-
-const saveErrorStyle: React.CSSProperties = {
-  color: '#b00020',
-};
-
-const successStyle: React.CSSProperties = {
-  color: '#0a7c2f',
-};
-
-const counterStyle: React.CSSProperties = {
-  fontSize: '0.875rem',
-  color: '#555',
-};
-
-const buttonStyle: React.CSSProperties = {
-  padding: '0.75rem 1.25rem',
-  fontSize: '1rem',
-  cursor: 'pointer',
-  alignSelf: 'flex-start',
-};
 
 /**
  * Human-readable message for an amount validation failure (Req 3.4). All
@@ -381,198 +338,219 @@ export function ExpenseEntryForm({
   );
 
   return (
-    <form onSubmit={handleSubmit} style={formStyle} noValidate>
-      <h1>Add expense</h1>
+    <div className="p-5 md:px-container_padding md:py-8 flex justify-center">
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        className="glass-card p-card_padding w-full max-w-xl flex flex-col gap-5"
+      >
+        <h1 className="text-headline-lg font-bold text-on-surface">Add expense</h1>
 
-      {/* Amount: required, numeric, 0.01..999,999,999.99, <= 2 decimals (Req 3.1, 3.4). */}
-      <div style={fieldStyle}>
-        <label htmlFor="expense-amount">Amount</label>
-        <input
-          id="expense-amount"
-          name="amount"
-          type="number"
-          inputMode="decimal"
-          step="0.01"
-          min={MIN_AMOUNT}
-          max={MAX_AMOUNT}
-          value={form.amount}
-          onChange={(event) => updateField('amount', event.target.value)}
-          disabled={isSaving}
-          aria-invalid={fieldErrors.amount !== undefined}
-          aria-describedby={
-            fieldErrors.amount !== undefined ? 'expense-amount-error' : undefined
-          }
-          style={controlStyle}
-        />
-        {fieldErrors.amount !== undefined && (
-          <span id="expense-amount-error" role="alert" style={fieldErrorStyle}>
-            {amountErrorMessage(fieldErrors.amount)}
-          </span>
-        )}
-      </div>
-
-      {/* Category: required selection populated from the family's categories (Req 3.1, 3.5, 4.6). */}
-      <div style={fieldStyle}>
-        <label htmlFor="expense-category">Category</label>
-        <select
-          id="expense-category"
-          name="category"
-          value={form.category}
-          onChange={(event) => updateField('category', event.target.value)}
-          disabled={isSaving}
-          aria-invalid={fieldErrors.category !== undefined}
-          aria-describedby={
-            fieldErrors.category !== undefined
-              ? 'expense-category-error'
-              : undefined
-          }
-          style={controlStyle}
-        >
-          <option value="">Select a category</option>
-          {categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-        {fieldErrors.category !== undefined && (
-          <span id="expense-category-error" role="alert" style={fieldErrorStyle}>
-            Select a category.
-          </span>
-        )}
-      </div>
-
-      {/* Source: required selection (Req 3.1, 3.6). */}
-      <div style={fieldStyle}>
-        <label htmlFor="expense-source">Source</label>
-        <select
-          id="expense-source"
-          name="source"
-          value={form.source}
-          onChange={(event) => updateField('source', event.target.value)}
-          disabled={isSaving}
-          aria-invalid={fieldErrors.source !== undefined}
-          aria-describedby={
-            fieldErrors.source !== undefined ? 'expense-source-error' : undefined
-          }
-          style={controlStyle}
-        >
-          <option value="">Select a source</option>
-          {SOURCES.map((source) => (
-            <option key={source} value={source}>
-              {source}
-            </option>
-          ))}
-        </select>
-        {fieldErrors.source !== undefined && (
-          <span id="expense-source-error" role="alert" style={fieldErrorStyle}>
-            Select a source.
-          </span>
-        )}
-      </div>
-
-      {/* SubSource: optional; shown only when the selected Source has at least
-          one SubSource for the family (Req 3.7, 3.8). */}
-      {subSourceOptions.length > 0 && (
-        <div style={fieldStyle}>
-          <label htmlFor="expense-subsource">Card/account (optional)</label>
-          <select
-            id="expense-subsource"
-            name="subSource"
-            value={form.subSource}
-            onChange={(event) => updateField('subSource', event.target.value)}
+        {/* Amount: required, numeric, 0.01..999,999,999.99, <= 2 decimals (Req 3.1, 3.4). */}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="expense-amount" className="text-sm text-on-surface-variant">
+            Amount
+          </label>
+          <input
+            id="expense-amount"
+            name="amount"
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min={MIN_AMOUNT}
+            max={MAX_AMOUNT}
+            value={form.amount}
+            onChange={(event) => updateField('amount', event.target.value)}
             disabled={isSaving}
-            style={controlStyle}
+            aria-invalid={fieldErrors.amount !== undefined}
+            aria-describedby={
+              fieldErrors.amount !== undefined ? 'expense-amount-error' : undefined
+            }
+            className={CONTROL_CLASS}
+          />
+          {fieldErrors.amount !== undefined && (
+            <span id="expense-amount-error" role="alert" className="text-error text-sm">
+              {amountErrorMessage(fieldErrors.amount)}
+            </span>
+          )}
+        </div>
+
+        {/* Category: required selection populated from the family's categories (Req 3.1, 3.5, 4.6). */}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="expense-category" className="text-sm text-on-surface-variant">
+            Category
+          </label>
+          <select
+            id="expense-category"
+            name="category"
+            value={form.category}
+            onChange={(event) => updateField('category', event.target.value)}
+            disabled={isSaving}
+            aria-invalid={fieldErrors.category !== undefined}
+            aria-describedby={
+              fieldErrors.category !== undefined
+                ? 'expense-category-error'
+                : undefined
+            }
+            className={CONTROL_CLASS}
           >
-            <option value="">No specific card/account</option>
-            {subSourceOptions.map((subSource) => (
-              <option key={subSource.id} value={subSource.id}>
-                {subSourceLabel(subSource.nickname, subSource.last4)}
+            <option value="">Select a category</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
               </option>
             ))}
           </select>
+          {fieldErrors.category !== undefined && (
+            <span id="expense-category-error" role="alert" className="text-error text-sm">
+              Select a category.
+            </span>
+          )}
         </div>
-      )}
 
-      {/* Date: optional; empty defaults to today (Req 3.1, 3.9, 3.10). */}
-      <div style={fieldStyle}>
-        <label htmlFor="expense-date">Date</label>
-        <input
-          id="expense-date"
-          name="date"
-          type="date"
-          min={MIN_DATE}
-          value={form.date}
-          onChange={(event) => updateField('date', event.target.value)}
-          disabled={isSaving}
-          aria-invalid={fieldErrors.date !== undefined}
-          aria-describedby={
-            fieldErrors.date !== undefined ? 'expense-date-error' : undefined
-          }
-          style={controlStyle}
-        />
-        {fieldErrors.date !== undefined && (
-          <span id="expense-date-error" role="alert" style={fieldErrorStyle}>
-            {dateErrorMessage(fieldErrors.date)}
-          </span>
-        )}
-      </div>
-
-      {/* Description: optional, 0..280 characters (Req 3.1). */}
-      <div style={fieldStyle}>
-        <label htmlFor="expense-description">Description</label>
-        <textarea
-          id="expense-description"
-          name="description"
-          rows={3}
-          maxLength={MAX_DESCRIPTION_LENGTH}
-          value={form.description}
-          onChange={(event) => updateField('description', event.target.value)}
-          disabled={isSaving}
-          aria-invalid={fieldErrors.description !== undefined}
-          aria-describedby={
-            fieldErrors.description !== undefined
-              ? 'expense-description-error'
-              : undefined
-          }
-          style={controlStyle}
-        />
-        <span style={counterStyle}>
-          {descriptionLength}/{MAX_DESCRIPTION_LENGTH}
-        </span>
-        {fieldErrors.description !== undefined && (
-          <span
-            id="expense-description-error"
-            role="alert"
-            style={fieldErrorStyle}
+        {/* Source: required selection (Req 3.1, 3.6). */}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="expense-source" className="text-sm text-on-surface-variant">
+            Source
+          </label>
+          <select
+            id="expense-source"
+            name="source"
+            value={form.source}
+            onChange={(event) => updateField('source', event.target.value)}
+            disabled={isSaving}
+            aria-invalid={fieldErrors.source !== undefined}
+            aria-describedby={
+              fieldErrors.source !== undefined ? 'expense-source-error' : undefined
+            }
+            className={CONTROL_CLASS}
           >
-            {descriptionErrorMessage(fieldErrors.description)}
-          </span>
+            <option value="">Select a source</option>
+            {SOURCES.map((source) => (
+              <option key={source} value={source}>
+                {source}
+              </option>
+            ))}
+          </select>
+          {fieldErrors.source !== undefined && (
+            <span id="expense-source-error" role="alert" className="text-error text-sm">
+              Select a source.
+            </span>
+          )}
+        </div>
+
+        {/* SubSource: optional; shown only when the selected Source has at least
+            one SubSource for the family (Req 3.7, 3.8). */}
+        {subSourceOptions.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="expense-subsource" className="text-sm text-on-surface-variant">
+              Card/account (optional)
+            </label>
+            <select
+              id="expense-subsource"
+              name="subSource"
+              value={form.subSource}
+              onChange={(event) => updateField('subSource', event.target.value)}
+              disabled={isSaving}
+              className={CONTROL_CLASS}
+            >
+              <option value="">No specific card/account</option>
+              {subSourceOptions.map((subSource) => (
+                <option key={subSource.id} value={subSource.id}>
+                  {subSourceLabel(subSource.nickname, subSource.last4)}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
-      </div>
 
-      {/* Save-failed error; entered values are retained (Req 3.12). */}
-      {saveState.kind === 'error' && (
-        <p role="alert" style={saveErrorStyle}>
-          {SAVE_FAILED_MESSAGE}
-        </p>
-      )}
+        {/* Date: optional; empty defaults to today (Req 3.1, 3.9, 3.10). */}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="expense-date" className="text-sm text-on-surface-variant">
+            Date
+          </label>
+          <input
+            id="expense-date"
+            name="date"
+            type="date"
+            min={MIN_DATE}
+            value={form.date}
+            onChange={(event) => updateField('date', event.target.value)}
+            disabled={isSaving}
+            aria-invalid={fieldErrors.date !== undefined}
+            aria-describedby={
+              fieldErrors.date !== undefined ? 'expense-date-error' : undefined
+            }
+            className={`${CONTROL_CLASS} [color-scheme:dark]`}
+          />
+          {fieldErrors.date !== undefined && (
+            <span id="expense-date-error" role="alert" className="text-error text-sm">
+              {dateErrorMessage(fieldErrors.date)}
+            </span>
+          )}
+        </div>
 
-      {/* Success confirmation; fields are cleared on success (Req 3.11). */}
-      {saveState.kind === 'success' && (
-        <p role="status" aria-live="polite" style={successStyle}>
-          {SAVE_SUCCESS_MESSAGE}
-        </p>
-      )}
+        {/* Description: optional, 0..280 characters (Req 3.1). */}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="expense-description" className="text-sm text-on-surface-variant">
+            Description
+          </label>
+          <textarea
+            id="expense-description"
+            name="description"
+            rows={3}
+            maxLength={MAX_DESCRIPTION_LENGTH}
+            value={form.description}
+            onChange={(event) => updateField('description', event.target.value)}
+            disabled={isSaving}
+            aria-invalid={fieldErrors.description !== undefined}
+            aria-describedby={
+              fieldErrors.description !== undefined
+                ? 'expense-description-error'
+                : undefined
+            }
+            className={`${CONTROL_CLASS} resize-y`}
+          />
+          <span className="text-xs text-on-surface-variant self-end">
+            {descriptionLength}/{MAX_DESCRIPTION_LENGTH}
+          </span>
+          {fieldErrors.description !== undefined && (
+            <span
+              id="expense-description-error"
+              role="alert"
+              className="text-error text-sm"
+            >
+              {descriptionErrorMessage(fieldErrors.description)}
+            </span>
+          )}
+        </div>
 
-      <button
-        type="submit"
-        disabled={isSaving}
-        aria-busy={isSaving}
-        style={buttonStyle}
-      >
-        {isSaving ? 'Saving…' : 'Save expense'}
-      </button>
-    </form>
+        {/* Save-failed error; entered values are retained (Req 3.12). */}
+        {saveState.kind === 'error' && (
+          <p role="alert" className="text-error text-sm">
+            {SAVE_FAILED_MESSAGE}
+          </p>
+        )}
+
+        {/* Success confirmation; fields are cleared on success (Req 3.11). */}
+        {saveState.kind === 'success' && (
+          <p role="status" aria-live="polite" className="text-primary-container text-sm">
+            {SAVE_SUCCESS_MESSAGE}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={isSaving}
+          aria-busy={isSaving}
+          className="btn-primary px-5 py-3 self-start flex items-center gap-2"
+        >
+          <span className="material-symbols-outlined text-lg" aria-hidden="true">
+            save
+          </span>
+          {isSaving ? 'Saving…' : 'Save expense'}
+        </button>
+      </form>
+    </div>
   );
 }

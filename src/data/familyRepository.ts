@@ -21,12 +21,10 @@ import {
   doc,
   getDoc,
   getDocs,
-  query,
   runTransaction,
   serverTimestamp,
   setDoc,
   Timestamp,
-  where,
   writeBatch,
   type DocumentData,
   type QueryDocumentSnapshot,
@@ -202,18 +200,19 @@ async function seedDefaultCategories(familyId: string): Promise<FamilyCategory[]
 }
 
 /**
- * Read the creator's legacy top-level expenses for migration. Best-effort and
- * scoped to documents the creator recorded (Req 10.1); failures are non-fatal
- * to family creation and surface an empty list.
+ * Read ALL legacy top-level expenses for migration into the first family.
+ *
+ * Per the product decision, every pre-existing expense — regardless of which
+ * member recorded it — belongs to the family and is migrated in (Req 10.1).
+ * Best-effort: failures are non-fatal to family creation and surface an empty
+ * list. The transitional security rule permits an authenticated user to read
+ * the legacy top-level `expenses` collection so this one-time migration can
+ * run.
  */
-async function readLegacyExpensesForCreator(
-  creatorUid: string,
-): Promise<LegacyExpenseDocument[]> {
-  const legacyQuery = query(
+async function readAllLegacyExpenses(): Promise<LegacyExpenseDocument[]> {
+  const snapshot = await getDocs(
     collection(firestore, LEGACY_EXPENSES_COLLECTION),
-    where('recordedBy', '==', creatorUid),
   );
-  const snapshot = await getDocs(legacyQuery);
   return snapshot.docs.map((snap: QueryDocumentSnapshot<DocumentData>) => {
     const data = snap.data();
     return {
@@ -243,10 +242,9 @@ async function readLegacyExpensesForCreator(
  */
 async function migrateLegacyExpenses(
   familyId: string,
-  creator: FamilyMember,
   seededCategories: FamilyCategory[],
 ): Promise<MigrationFailure[]> {
-  const legacy = await readLegacyExpensesForCreator(creator.uid);
+  const legacy = await readAllLegacyExpenses();
   if (legacy.length === 0) {
     return [];
   }
@@ -390,7 +388,6 @@ export const familyRepository: FamilyRepository = {
     try {
       migrationFailures = await migrateLegacyExpenses(
         familyRef.id,
-        creator,
         seededCategories,
       );
       if (migrationFailures.length > 0) {

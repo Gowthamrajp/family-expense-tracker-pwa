@@ -21,9 +21,6 @@
  *    with a required nickname and optional last-4 validation, and lists the
  *    existing sub-sources grouped by source (Req 5.1, 5.2, 5.3, 5.5). Full card
  *    numbers are never stored (Req 5.6).
- *
- * Styling is intentionally minimal/inline, consistent with the other MVP
- * screens (see {@link CreateJoinFamily} / {@link SignIn}).
  */
 import { useState } from 'react';
 
@@ -38,67 +35,11 @@ const CATEGORY_DUPLICATE_MESSAGE = 'That category already exists.';
 const SUBSOURCE_NICKNAME_REQUIRED_MESSAGE = 'Enter a nickname.';
 const SUBSOURCE_INVALID_LAST4_MESSAGE = 'Last 4 digits must be exactly 4 digits.';
 
-const containerStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '2rem',
-  padding: '1.5rem',
-  maxWidth: '36rem',
-  margin: '0 auto',
-};
+/** Shared classes for ghost form controls. */
+const CONTROL_CLASS = 'ghost-input px-3 py-2.5 text-body-md';
 
-const sectionStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.75rem',
-};
-
-const labelStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.25rem',
-  textAlign: 'left',
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: '0.5rem',
-  fontSize: '1rem',
-};
-
-const buttonStyle: React.CSSProperties = {
-  padding: '0.5rem 1rem',
-  fontSize: '1rem',
-  cursor: 'pointer',
-};
-
-const inlineFormStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '0.5rem',
-  flexWrap: 'wrap',
-  alignItems: 'flex-end',
-};
-
-const errorStyle: React.CSSProperties = {
-  color: '#b00020',
-};
-
-const successStyle: React.CSSProperties = {
-  color: '#0a6b3c',
-};
-
-const inviteCodeStyle: React.CSSProperties = {
-  fontFamily: 'monospace',
-  fontSize: '1.5rem',
-  letterSpacing: '0.1em',
-  padding: '0.25rem 0.5rem',
-  background: '#f2f2f2',
-  borderRadius: '4px',
-};
-
-const noteStyle: React.CSSProperties = {
-  fontSize: '0.85rem',
-  color: '#555',
-};
+/** Shared classes for a labelled form field column. */
+const FIELD_CLASS = 'flex flex-col gap-1.5 text-left text-sm text-on-surface-variant';
 
 /**
  * Render the family settings screen.
@@ -115,16 +56,18 @@ export function FamilySettings(): JSX.Element {
 
   if (status === 'loading') {
     return (
-      <main style={containerStyle}>
-        <p role="status">Loading family…</p>
+      <main className="p-5 md:px-container_padding md:py-8 max-w-3xl mx-auto">
+        <p role="status" className="text-on-surface-variant">
+          Loading family…
+        </p>
       </main>
     );
   }
 
   if (status === 'error') {
     return (
-      <main style={containerStyle}>
-        <p role="alert" style={errorStyle}>
+      <main className="p-5 md:px-container_padding md:py-8 max-w-3xl mx-auto">
+        <p role="alert" className="text-error">
           Your family could not be loaded.
         </p>
       </main>
@@ -133,15 +76,15 @@ export function FamilySettings(): JSX.Element {
 
   if (status === 'no-family' || family === null) {
     return (
-      <main style={containerStyle}>
-        <p>You don't belong to a family yet.</p>
+      <main className="p-5 md:px-container_padding md:py-8 max-w-3xl mx-auto">
+        <p className="text-on-surface-variant">You don't belong to a family yet.</p>
       </main>
     );
   }
 
   return (
-    <main style={containerStyle}>
-      <h1>Family settings</h1>
+    <main className="p-5 md:px-container_padding md:py-8 max-w-3xl mx-auto flex flex-col gap-grid_gap">
+      <h1 className="text-headline-lg font-bold text-on-surface">Family settings</h1>
       <FamilySection inviteCode={family.inviteCode} members={members} />
       <CategoryManager familyId={familyId} />
       <SubSourceManager familyId={familyId} />
@@ -178,42 +121,65 @@ function FamilySection({ inviteCode, members }: FamilySectionProps): JSX.Element
   };
 
   return (
-    <section style={sectionStyle} aria-labelledby="family-heading">
-      <h2 id="family-heading">Your family</h2>
+    <section
+      className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
+      aria-labelledby="family-heading"
+    >
+      <h2 id="family-heading" className="text-headline-md font-semibold text-on-surface">
+        Your family
+      </h2>
 
-      <div style={sectionStyle}>
-        <span>Share this invite code so others can join:</span>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <span style={inviteCodeStyle} data-testid="invite-code">
+      <div className="flex flex-col gap-3">
+        <span className="text-sm text-on-surface-variant">
+          Share this invite code so others can join:
+        </span>
+        <div className="flex flex-wrap gap-3 items-center">
+          <span
+            data-testid="invite-code"
+            className="font-mono text-2xl tracking-[0.2em] px-4 py-2 rounded-lg text-primary-container bg-primary-container/10 border border-primary-container/30"
+          >
             {inviteCode}
           </span>
           <button
             type="button"
             onClick={() => void handleCopy()}
-            style={buttonStyle}
+            className="btn-ghost px-4 py-2 text-sm flex items-center gap-1.5"
           >
+            <span className="material-symbols-outlined text-base" aria-hidden="true">
+              content_copy
+            </span>
             Copy
           </button>
         </div>
         {copied && (
-          <p role="status" style={successStyle}>
+          <p role="status" className="text-primary-container text-sm">
             Invite code copied.
           </p>
         )}
       </div>
 
-      <div style={sectionStyle}>
-        <h3>Members</h3>
+      <div className="flex flex-col gap-2">
+        <h3 className="text-label-caps uppercase text-on-surface-variant">Members</h3>
         {members.length === 0 ? (
-          <p>No members to show.</p>
+          <p className="text-on-surface-variant">No members to show.</p>
         ) : (
-          <ul>
+          <ul className="flex flex-col gap-2">
             {members.map((member) => {
               const label = resolveMemberLabel(member);
               // The repository can't currently hydrate names/emails for other
               // members, so fall back to the uid to keep rows distinguishable.
               const display = label === 'Signed in' ? member.uid : label;
-              return <li key={member.uid}>{display}</li>;
+              return (
+                <li
+                  key={member.uid}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-container-high/30 border border-outline-variant/20"
+                >
+                  <span className="material-symbols-outlined text-primary-container text-lg" aria-hidden="true">
+                    account_circle
+                  </span>
+                  <span className="text-on-surface text-sm truncate">{display}</span>
+                </li>
+              );
             })}
           </ul>
         )}
@@ -269,32 +235,44 @@ export function CategoryManager({ familyId }: CategoryManagerProps): JSX.Element
   };
 
   return (
-    <section style={sectionStyle} aria-labelledby="categories-heading">
-      <h2 id="categories-heading">Categories</h2>
+    <section
+      className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
+      aria-labelledby="categories-heading"
+    >
+      <h2 id="categories-heading" className="text-headline-md font-semibold text-on-surface">
+        Categories
+      </h2>
 
       {status === 'loading' ? (
-        <p role="status">Loading categories…</p>
+        <p role="status" className="text-on-surface-variant">
+          Loading categories…
+        </p>
       ) : (
         <>
           {status === 'error' && (
-            <p role="alert" style={errorStyle}>
+            <p role="alert" className="text-error">
               Categories could not be loaded.
             </p>
           )}
           {categories.length === 0 ? (
-            <p>No categories yet.</p>
+            <p className="text-on-surface-variant">No categories yet.</p>
           ) : (
-            <ul>
+            <ul className="flex flex-wrap gap-2">
               {categories.map((category) => (
-                <li key={category.id}>{category.name}</li>
+                <li
+                  key={category.id}
+                  className="px-3 py-1.5 rounded-full text-sm text-on-surface bg-surface-container-high/40 border border-outline-variant/20"
+                >
+                  {category.name}
+                </li>
               ))}
             </ul>
           )}
         </>
       )}
 
-      <div style={inlineFormStyle}>
-        <label style={labelStyle}>
+      <div className="flex flex-wrap gap-3 items-end">
+        <label className={`${FIELD_CLASS} flex-1 min-w-[12rem]`}>
           New category
           <input
             type="text"
@@ -306,7 +284,7 @@ export function CategoryManager({ familyId }: CategoryManagerProps): JSX.Element
               }
             }}
             disabled={isAdding}
-            style={inputStyle}
+            className={CONTROL_CLASS}
             autoComplete="off"
             aria-invalid={error !== null}
           />
@@ -316,19 +294,19 @@ export function CategoryManager({ familyId }: CategoryManagerProps): JSX.Element
           onClick={() => void handleAdd()}
           disabled={isAdding}
           aria-busy={isAdding}
-          style={buttonStyle}
+          className="btn-primary px-4 py-2.5"
         >
           {isAdding ? 'Adding…' : 'Add category'}
         </button>
       </div>
 
       {error && (
-        <p role="alert" style={errorStyle}>
+        <p role="alert" className="text-error text-sm">
           {error}
         </p>
       )}
       {confirmation && (
-        <p role="status" style={successStyle}>
+        <p role="status" className="text-primary-container text-sm">
           {confirmation}
         </p>
       )}
@@ -391,21 +369,26 @@ export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Eleme
   };
 
   return (
-    <section style={sectionStyle} aria-labelledby="subsources-heading">
-      <h2 id="subsources-heading">Payment sub-sources</h2>
-      <p style={noteStyle}>
+    <section
+      className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
+      aria-labelledby="subsources-heading"
+    >
+      <h2 id="subsources-heading" className="text-headline-md font-semibold text-on-surface">
+        Payment sub-sources
+      </h2>
+      <p className="text-sm text-on-surface-variant">
         Store a nickname and, optionally, the last 4 digits only. Full card
         numbers are never stored.
       </p>
 
-      <div style={inlineFormStyle}>
-        <label style={labelStyle}>
+      <div className="flex flex-wrap gap-3 items-end">
+        <label className={FIELD_CLASS}>
           Source
           <select
             value={source}
             onChange={(event) => setSource(event.target.value as Source)}
             disabled={isAdding}
-            style={inputStyle}
+            className={CONTROL_CLASS}
           >
             {SOURCES.map((option) => (
               <option key={option} value={option}>
@@ -414,7 +397,7 @@ export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Eleme
             ))}
           </select>
         </label>
-        <label style={labelStyle}>
+        <label className={`${FIELD_CLASS} flex-1 min-w-[10rem]`}>
           Nickname
           <input
             type="text"
@@ -426,12 +409,12 @@ export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Eleme
               }
             }}
             disabled={isAdding}
-            style={inputStyle}
+            className={CONTROL_CLASS}
             autoComplete="off"
             aria-invalid={error !== null}
           />
         </label>
-        <label style={labelStyle}>
+        <label className={FIELD_CLASS}>
           Last 4 digits (optional)
           <input
             type="text"
@@ -445,7 +428,7 @@ export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Eleme
               }
             }}
             disabled={isAdding}
-            style={inputStyle}
+            className={`${CONTROL_CLASS} w-28`}
             autoComplete="off"
           />
         </label>
@@ -454,29 +437,33 @@ export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Eleme
           onClick={() => void handleAdd()}
           disabled={isAdding}
           aria-busy={isAdding}
-          style={buttonStyle}
+          className="btn-primary px-4 py-2.5"
         >
           {isAdding ? 'Adding…' : 'Add sub-source'}
         </button>
       </div>
 
       {error && (
-        <p role="alert" style={errorStyle}>
+        <p role="alert" className="text-error text-sm">
           {error}
         </p>
       )}
       {confirmation && (
-        <p role="status" style={successStyle}>
+        <p role="status" className="text-primary-container text-sm">
           {confirmation}
         </p>
       )}
 
-      <div style={sectionStyle}>
-        <h3>Existing sub-sources</h3>
+      <div className="flex flex-col gap-3">
+        <h3 className="text-label-caps uppercase text-on-surface-variant">
+          Existing sub-sources
+        </h3>
         {status === 'loading' ? (
-          <p role="status">Loading sub-sources…</p>
+          <p role="status" className="text-on-surface-variant">
+            Loading sub-sources…
+          </p>
         ) : status === 'error' ? (
-          <p role="alert" style={errorStyle}>
+          <p role="alert" className="text-error">
             Sub-sources could not be loaded.
           </p>
         ) : (
@@ -486,11 +473,14 @@ export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Eleme
               return null;
             }
             return (
-              <div key={option}>
-                <h4>{option}</h4>
-                <ul>
+              <div key={option} className="flex flex-col gap-1.5">
+                <h4 className="text-sm font-semibold text-on-surface">{option}</h4>
+                <ul className="flex flex-col gap-1">
                   {items.map((subSource) => (
-                    <li key={subSource.id}>
+                    <li
+                      key={subSource.id}
+                      className="text-sm text-on-surface-variant px-3 py-1.5 rounded-lg bg-surface-container-high/30 border border-outline-variant/20"
+                    >
                       {subSource.nickname}
                       {subSource.last4 ? ` ••${subSource.last4}` : ''}
                     </li>

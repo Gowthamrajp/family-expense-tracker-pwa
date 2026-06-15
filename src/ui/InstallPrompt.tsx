@@ -32,12 +32,6 @@ interface BeforeInstallPromptEvent extends Event {
   readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
-const buttonStyle: React.CSSProperties = {
-  padding: '0.5rem 1rem',
-  fontSize: '0.95rem',
-  cursor: 'pointer',
-};
-
 /**
  * Render an install affordance while the browser reports the app is installable.
  */
@@ -95,9 +89,12 @@ export function InstallPrompt(): JSX.Element | null {
     <button
       type="button"
       onClick={handleInstall}
-      style={buttonStyle}
+      className="btn-ghost px-4 py-2 text-sm flex items-center gap-1.5"
       data-testid="install-prompt"
     >
+      <span className="material-symbols-outlined text-base" aria-hidden="true">
+        install_mobile
+      </span>
       Install app
     </button>
   );

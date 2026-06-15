@@ -29,13 +29,14 @@
  *   left rendered unchanged (Req 4.7).
  *
  * The aggregation is delegated to the pure functions in
- * {@link ../domain/aggregation}. Styling is intentionally minimal/inline for
- * the MVP and charts are wrapped in Recharts' `ResponsiveContainer`.
+ * {@link ../domain/aggregation}. Charts are wrapped in Recharts'
+ * `ResponsiveContainer` and themed to the dark glass aesthetic.
  */
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -74,61 +75,73 @@ function formatAmount(amount: number): string {
   return currencyFormatter.format(amount);
 }
 
-const containerStyle: React.CSSProperties = {
-  padding: '1rem',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '1.5rem',
+/** Neon-cyan accent used across chart bars/gradients. */
+const ACCENT = '#00f5ff';
+
+/** Shared dark tooltip styling matching the glass theme. */
+const TOOLTIP_CONTENT_STYLE: React.CSSProperties = {
+  background: '#1f2021',
+  border: '1px solid rgba(0, 245, 255, 0.3)',
+  borderRadius: 12,
+  color: '#e4e2e3',
 };
 
-const totalStyle: React.CSSProperties = {
-  fontSize: '2rem',
-  fontWeight: 600,
-  margin: 0,
-};
-
-const chartSectionStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.5rem',
-};
-
-const errorStyle: React.CSSProperties = {
-  color: '#b00020',
-};
-
-/** Fill color used for chart bars. */
-const BAR_FILL = '#3367d6';
+/** Axis tick text styling (on-surface-variant). */
+const AXIS_TICK = { fill: '#b9caca', fontSize: 12 } as const;
 
 /** Props for {@link ChartSection}. */
 interface ChartSectionProps {
   title: string;
   testId: string;
   data: GroupTotal[];
+  gradientId: string;
 }
 
 /**
  * Render a titled bar chart of group totals inside a responsive container.
  *
  * The chart plots one bar per {@link GroupTotal}, with the group key on the X
- * axis and its total on the Y axis.
+ * axis and its total on the Y axis, themed with a vertical cyan gradient,
+ * muted grid lines, and a dark tooltip.
  */
-function ChartSection({ title, testId, data }: ChartSectionProps): JSX.Element {
+function ChartSection({
+  title,
+  testId,
+  data,
+  gradientId,
+}: ChartSectionProps): JSX.Element {
   return (
-    <section style={chartSectionStyle} data-testid={testId} aria-label={title}>
-      <h2>{title}</h2>
-      <div style={{ width: '100%', height: 280 }}>
+    <section
+      className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
+      data-testid={testId}
+      aria-label={title}
+    >
+      <h2 className="text-headline-md font-semibold text-on-surface">{title}</h2>
+      <div className="w-full h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="key" />
-            <YAxis />
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={ACCENT} stopOpacity={0.9} />
+                <stop offset="100%" stopColor={ACCENT} stopOpacity={0.25} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+            <XAxis dataKey="key" tick={AXIS_TICK} tickLine={false} stroke="#3a494a" />
+            <YAxis tick={AXIS_TICK} tickLine={false} stroke="#3a494a" />
             <Tooltip
+              cursor={{ fill: 'rgba(0,245,255,0.06)' }}
+              contentStyle={TOOLTIP_CONTENT_STYLE}
+              labelStyle={{ color: '#b9caca' }}
               formatter={(value) =>
                 formatAmount(typeof value === 'number' ? value : Number(value))
               }
             />
-            <Bar dataKey="total" fill={BAR_FILL} name={title} />
+            <Bar dataKey="total" fill={`url(#${gradientId})`} name={title} radius={[6, 6, 0, 0]}>
+              {data.map((entry) => (
+                <Cell key={entry.key} fill={`url(#${gradientId})`} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -194,12 +207,21 @@ export function Dashboard({
   const hasExpenses = expenses.length > 0;
 
   return (
-    <section data-screen="dashboard" aria-label="Spending dashboard" style={containerStyle}>
-      <h1>Dashboard</h1>
+    <section
+      data-screen="dashboard"
+      aria-label="Spending dashboard"
+      className="p-5 md:px-container_padding md:py-8 flex flex-col gap-grid_gap"
+    >
+      <h1 className="text-headline-lg font-bold text-on-surface">Dashboard</h1>
 
       {/* Loading indicator while the data is being retrieved. */}
       {status === 'loading' && (
-        <p role="status" aria-live="polite" data-testid="dashboard-loading">
+        <p
+          role="status"
+          aria-live="polite"
+          data-testid="dashboard-loading"
+          className="text-on-surface-variant"
+        >
           Loading dashboard…
         </p>
       )}
@@ -209,9 +231,19 @@ export function Dashboard({
         is retained by the hook and still rendered below unchanged.
       */}
       {status === 'error' && (
-        <div role="alert" style={errorStyle}>
-          <p data-testid="dashboard-error">{LOAD_ERROR_MESSAGE}</p>
-          <button type="button" onClick={retry} data-testid="dashboard-retry">
+        <div
+          role="alert"
+          className="glass-card border-error/30 p-5 flex flex-wrap items-center gap-4"
+        >
+          <p data-testid="dashboard-error" className="text-error">
+            {LOAD_ERROR_MESSAGE}
+          </p>
+          <button
+            type="button"
+            onClick={retry}
+            data-testid="dashboard-retry"
+            className="btn-ghost px-4 py-2 text-sm"
+          >
             Retry
           </button>
         </div>
@@ -219,36 +251,61 @@ export function Dashboard({
 
       {/* Empty state once a successful read returns no expenses (Req 4.6). */}
       {status === 'ready' && !hasExpenses && (
-        <p data-testid="dashboard-empty">{EMPTY_STATE_MESSAGE}</p>
+        <div className="glass-card p-card_padding flex flex-col items-center gap-3 text-center">
+          <span className="material-symbols-outlined text-primary-container text-4xl" aria-hidden="true">
+            account_balance_wallet
+          </span>
+          <p data-testid="dashboard-empty" className="text-on-surface-variant text-body-lg">
+            {EMPTY_STATE_MESSAGE}
+          </p>
+        </div>
       )}
 
       {/* Total + visualizations (Req 4.1–4.4). Rendered whenever data exists,
           including the error case where prior data is retained (Req 4.7). */}
       {hasExpenses && (
-        <>
-          <div>
-            <h2>Total spending</h2>
-            <p style={totalStyle} data-testid="dashboard-total">
+        <div className="grid grid-cols-12 gap-grid_gap">
+          {/* Hero: total family spend (wide glass tile). */}
+          <div className="col-span-12 glass-card glass-card-hover p-card_padding relative overflow-hidden">
+            <h2 className="text-label-caps uppercase text-on-surface-variant mb-2">
+              Total Family Spend
+            </h2>
+            <p
+              data-testid="dashboard-total"
+              className="text-[clamp(40px,8vw,64px)] leading-none font-extrabold tracking-tighter text-white neon-glow"
+            >
               {formatAmount(total)}
             </p>
+            <span className="material-symbols-outlined absolute right-6 top-6 text-primary-container/30 text-5xl" aria-hidden="true">
+              insights
+            </span>
           </div>
 
-          <ChartSection
-            title="Spending by category"
-            testId="dashboard-category-chart"
-            data={byCategory}
-          />
-          <ChartSection
-            title="Spending by source"
-            testId="dashboard-source-chart"
-            data={bySource}
-          />
-          <ChartSection
-            title="Spending by month"
-            testId="dashboard-month-chart"
-            data={byMonth}
-          />
-        </>
+          <div className="col-span-12 lg:col-span-7">
+            <ChartSection
+              title="Spending by category"
+              testId="dashboard-category-chart"
+              data={byCategory}
+              gradientId="grad-category"
+            />
+          </div>
+          <div className="col-span-12 lg:col-span-5">
+            <ChartSection
+              title="Spending by source"
+              testId="dashboard-source-chart"
+              data={bySource}
+              gradientId="grad-source"
+            />
+          </div>
+          <div className="col-span-12">
+            <ChartSection
+              title="Spending by month"
+              testId="dashboard-month-chart"
+              data={byMonth}
+              gradientId="grad-month"
+            />
+          </div>
+        </div>
       )}
     </section>
   );

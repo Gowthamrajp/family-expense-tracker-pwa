@@ -28,8 +28,6 @@
  * - `error` — show an error message plus a retry control that re-attempts the
  *   retrieval via `retry()`; any previously displayed data is retained by the
  *   hook (Req 3.8, 3.9).
- *
- * Styling is intentionally minimal/inline for the MVP.
  */
 import { useExpenses } from '../state/useExpenses';
 import { useCategories } from '../state/useCategories';
@@ -71,59 +69,31 @@ function formatDate(date: Date): string {
   return dateFormatter.format(date);
 }
 
-const listStyle: React.CSSProperties = {
-  listStyle: 'none',
-  margin: 0,
-  padding: 0,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.5rem',
-};
+/**
+ * Map a few common category names to Material Symbols icons; fall back to a
+ * generic category icon. Purely presentational — does not affect data.
+ */
+const CATEGORY_ICONS: ReadonlyArray<[RegExp, string]> = [
+  [/grocer|food|supermarket/i, 'shopping_basket'],
+  [/dining|restaurant|eat/i, 'restaurant'],
+  [/transport|fuel|gas|car|travel/i, 'directions_car'],
+  [/rent|hous|mortgage|utilit/i, 'home'],
+  [/health|medical|pharm/i, 'medical_services'],
+  [/leisure|entertain|movie|fun/i, 'movie'],
+  [/shop|cloth|retail/i, 'shopping_bag'],
+  [/bill|subscription|electric|water/i, 'receipt'],
+  [/educat|school|tuition/i, 'school'],
+  [/wellness|fitness|gym/i, 'fitness_center'],
+];
 
-const rowStyle: React.CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  alignItems: 'baseline',
-  gap: '0.5rem 1rem',
-  padding: '0.75rem 1rem',
-  border: '1px solid #ddd',
-  borderRadius: '4px',
-};
-
-const amountStyle: React.CSSProperties = {
-  fontWeight: 600,
-  minWidth: '6rem',
-};
-
-const metaStyle: React.CSSProperties = {
-  color: '#444',
-};
-
-const recordedByStyle: React.CSSProperties = {
-  color: '#555',
-  fontStyle: 'italic',
-};
-
-const dateStyle: React.CSSProperties = {
-  color: '#666',
-  marginLeft: 'auto',
-};
-
-const descriptionStyle: React.CSSProperties = {
-  flexBasis: '100%',
-  color: '#333',
-};
-
-const errorStyle: React.CSSProperties = {
-  color: '#b00020',
-};
-
-const containerStyle: React.CSSProperties = {
-  padding: '1rem',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '1rem',
-};
+function categoryIcon(categoryName: string): string {
+  for (const [pattern, icon] of CATEGORY_ICONS) {
+    if (pattern.test(categoryName)) {
+      return icon;
+    }
+  }
+  return 'category';
+}
 
 /** Props for {@link ExpenseListRow}. */
 interface ExpenseListRowProps {
@@ -131,9 +101,9 @@ interface ExpenseListRowProps {
 }
 
 /**
- * Render a single resolved expense as a list row showing amount, Category
- * name, Source name, SubSource nickname (when present), recording member,
- * date, and description (blank when empty).
+ * Render a single resolved expense as a glass-card row showing a category icon
+ * chip, amount, Category name, Source name, SubSource nickname (when present),
+ * recording member, date, and description (blank when empty).
  *
  * Validates: Requirements 6.2, 6.3
  */
@@ -149,40 +119,66 @@ function ExpenseListRow({ row }: ExpenseListRowProps): JSX.Element {
   } = row;
 
   return (
-    <li data-testid="expense-row" style={rowStyle}>
-      <span data-testid="expense-amount" style={amountStyle}>
-        {formatAmount(amount)}
-      </span>
-      <span data-testid="expense-category" style={metaStyle}>
-        {categoryName}
-      </span>
-      <span data-testid="expense-source" style={metaStyle}>
-        {sourceName}
-      </span>
-      {/*
-        SubSource nickname is shown only when the expense references a known
-        sub-source (Req 6.2). It is omitted entirely otherwise so the row is
-        not cluttered with an empty field.
-      */}
-      {subSourceNickname !== undefined && (
-        <span data-testid="expense-subsource" style={metaStyle}>
-          {subSourceNickname}
+    <li
+      data-testid="expense-row"
+      className="glass-card glass-card-hover p-4 flex items-center gap-4"
+    >
+      {/* Category icon chip. */}
+      <div className="shrink-0 w-12 h-12 rounded-lg bg-primary-container/10 flex items-center justify-center text-primary-container">
+        <span className="material-symbols-outlined" aria-hidden="true">
+          {categoryIcon(categoryName)}
         </span>
-      )}
-      <span data-testid="expense-recordedby" style={recordedByStyle}>
-        {recordedByName}
-      </span>
-      <span data-testid="expense-date" style={dateStyle}>
-        {formatDate(date)}
-      </span>
-      {/*
-        Description is shown when present and left blank when empty (Req 6.3).
-        The element is always rendered so the row layout is stable; its text
-        content is the empty string for descriptionless expenses.
-      */}
-      <span data-testid="expense-description" style={descriptionStyle}>
-        {description}
-      </span>
+      </div>
+
+      {/* Primary info: category, recorded-by, source/sub-source, description. */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span data-testid="expense-category" className="font-semibold text-on-surface">
+            {categoryName}
+          </span>
+          <span data-testid="expense-recordedby" className="text-xs text-on-surface-variant italic">
+            by {recordedByName}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap text-xs text-on-surface-variant mt-0.5">
+          <span data-testid="expense-source">{sourceName}</span>
+          {/*
+            SubSource nickname is shown only when the expense references a known
+            sub-source (Req 6.2). It is omitted entirely otherwise so the row is
+            not cluttered with an empty field.
+          */}
+          {subSourceNickname !== undefined && (
+            <>
+              <span aria-hidden="true">•</span>
+              <span data-testid="expense-subsource">{subSourceNickname}</span>
+            </>
+          )}
+        </div>
+        {/*
+          Description is shown when present and left blank when empty (Req 6.3).
+          The element is always rendered so the row layout is stable; its text
+          content is the empty string for descriptionless expenses.
+        */}
+        <span
+          data-testid="expense-description"
+          className="block text-sm text-on-surface-variant mt-1 truncate"
+        >
+          {description}
+        </span>
+      </div>
+
+      {/* Amount + date, right aligned. */}
+      <div className="text-right shrink-0">
+        <span
+          data-testid="expense-amount"
+          className="block font-mono-data text-lg font-semibold text-white"
+        >
+          {formatAmount(amount)}
+        </span>
+        <span data-testid="expense-date" className="block text-xs text-on-surface-variant mt-0.5">
+          {formatDate(date)}
+        </span>
+      </div>
     </li>
   );
 }
@@ -225,12 +221,21 @@ export function ExpenseList({
   );
 
   return (
-    <section data-screen="expenses" aria-label="Recorded expenses" style={containerStyle}>
-      <h1>Expenses</h1>
+    <section
+      data-screen="expenses"
+      aria-label="Recorded expenses"
+      className="p-5 md:px-container_padding md:py-8 flex flex-col gap-grid_gap"
+    >
+      <h1 className="text-headline-lg font-bold text-on-surface">Expenses</h1>
 
       {/* Loading indicator while the list is being retrieved (Req 3.7). */}
       {status === 'loading' && (
-        <p role="status" aria-live="polite" data-testid="expense-loading">
+        <p
+          role="status"
+          aria-live="polite"
+          data-testid="expense-loading"
+          className="text-on-surface-variant"
+        >
           Loading expenses…
         </p>
       )}
@@ -240,9 +245,19 @@ export function ExpenseList({
         expenses are retained by the hook and still rendered below.
       */}
       {status === 'error' && (
-        <div role="alert" style={errorStyle}>
-          <p data-testid="expense-error">{LOAD_ERROR_MESSAGE}</p>
-          <button type="button" onClick={retry} data-testid="expense-retry">
+        <div
+          role="alert"
+          className="glass-card border-error/30 p-5 flex flex-wrap items-center gap-4"
+        >
+          <p data-testid="expense-error" className="text-error">
+            {LOAD_ERROR_MESSAGE}
+          </p>
+          <button
+            type="button"
+            onClick={retry}
+            data-testid="expense-retry"
+            className="btn-ghost px-4 py-2 text-sm"
+          >
             Retry
           </button>
         </div>
@@ -250,12 +265,19 @@ export function ExpenseList({
 
       {/* Empty state once a successful read returns no expenses (Req 3.6). */}
       {status === 'ready' && rows.length === 0 && (
-        <p data-testid="expense-empty">{EMPTY_STATE_MESSAGE}</p>
+        <div className="glass-card p-card_padding flex flex-col items-center gap-3 text-center">
+          <span className="material-symbols-outlined text-primary-container text-4xl" aria-hidden="true">
+            receipt_long
+          </span>
+          <p data-testid="expense-empty" className="text-on-surface-variant text-body-lg">
+            {EMPTY_STATE_MESSAGE}
+          </p>
+        </div>
       )}
 
       {/* Ordered expense list (Req 3.1, 3.2, 3.4, 6.1, 6.2, 6.3). */}
       {rows.length > 0 && (
-        <ul style={listStyle}>
+        <ul className="list-none m-0 p-0 flex flex-col gap-3">
           {rows.map((row) => (
             <ExpenseListRow key={row.id} row={row} />
           ))}

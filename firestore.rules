@@ -65,14 +65,15 @@ service cloud.firestore {
 
     // TRANSITIONAL (legacy MVP data): the MVP stored expenses in a single
     // top-level `expenses` collection. The one-time client-side migration
-    // (runs when the first family is created) needs to read these legacy docs
-    // so they can be copied into the family's subcollection. We allow only the
-    // original recorder to READ their legacy docs; no new writes are permitted
-    // here (all new expense writes go through families/{familyId}/expenses).
-    // This rule should be removed once migration is complete for all users.
+    // (runs when the first family is created) copies ALL of these legacy docs
+    // into the family's subcollection — every pre-existing expense belongs to
+    // the family regardless of who recorded it. We therefore allow any
+    // authenticated user to READ the legacy collection; no new writes are
+    // permitted here (all new expense writes go through
+    // families/{familyId}/expenses). Remove this block once migration is
+    // complete for all users.
     match /expenses/{expenseId} {
-      allow read: if request.auth != null
-                  && resource.data.recordedBy == request.auth.uid;
+      allow read: if request.auth != null;
       allow create, update, delete: if false;
     }
   }

@@ -370,7 +370,7 @@ design Properties 9–13 with fast-check (minimum 100 iterations, tagged
   - [x] 32.2 Wire the one-time migration trigger into first-family creation and surface a migration-failure indication when an expense cannot be mapped
     - _Requirements: 10.1, 10.5_
 
-- [-] 33. Final checkpoint - build, test, and deploy the expansion
+- [x] 33. Final checkpoint - build, test, and deploy the expansion
   - Run build, typecheck, and the test suite; deploy the updated Firestore rules (`firebase deploy --only firestore:rules`) and Hosting (`firebase deploy --only hosting`); verify create/join family, add category, add sub-source, record a family-scoped expense, and confirm migration preserved existing data.
   - _Requirements: 9.1, 10.1, 11.2_
 

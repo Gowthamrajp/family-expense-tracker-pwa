@@ -73,32 +73,27 @@ const STEPS: Record<Platform, { heading: string; steps: string[] }> = {
   },
 };
 
-const buttonStyle: React.CSSProperties = {
-  padding: '0.5rem 1rem',
-  fontSize: '0.95rem',
-  cursor: 'pointer',
-  background: 'none',
-  border: '1px solid #bbb',
-  borderRadius: '4px',
-};
-
 const panelStyle: React.CSSProperties = {
   position: 'absolute',
-  right: '1rem',
+  right: 0,
   marginTop: '0.5rem',
   maxWidth: '22rem',
+  width: '22rem',
   padding: '1rem',
-  background: '#fff',
-  border: '1px solid #ddd',
-  borderRadius: '8px',
-  boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-  zIndex: 10,
+  background: '#1f2021',
+  border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: '16px',
+  boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
+  zIndex: 60,
   textAlign: 'left',
+  color: '#e4e2e3',
 };
 
 const headingStyle: React.CSSProperties = {
   margin: '0 0 0.5rem',
   fontSize: '1rem',
+  fontWeight: 600,
+  color: '#e4e2e3',
 };
 
 const listStyle: React.CSSProperties = {
@@ -107,6 +102,7 @@ const listStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: '0.35rem',
+  color: '#b9caca',
 };
 
 /**
@@ -131,12 +127,15 @@ export function InstallInstructions(): JSX.Element | null {
     <div style={{ position: 'relative' }}>
       <button
         type="button"
-        style={buttonStyle}
+        className="btn-ghost px-4 py-2 text-sm flex items-center gap-1.5"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-controls="install-instructions-panel"
         data-testid="install-instructions-toggle"
       >
+        <span className="material-symbols-outlined text-base" aria-hidden="true">
+          help
+        </span>
         How to install
       </button>
 

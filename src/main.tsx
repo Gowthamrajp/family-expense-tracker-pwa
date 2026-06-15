@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './ui/App';
+import './index.css';
 import { registerPwa } from './pwa';
 import {
   markPwaRegistered,

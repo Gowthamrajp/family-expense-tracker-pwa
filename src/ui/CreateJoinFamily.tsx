@@ -33,46 +33,6 @@ import { useFamily } from '../state/FamilyProvider';
 const INVALID_INVITE_CODE_MESSAGE =
   "That invite code didn't match any family.";
 
-const containerStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: '2rem',
-  minHeight: '100vh',
-  padding: '1.5rem',
-};
-
-const sectionStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.75rem',
-  width: '100%',
-  maxWidth: '24rem',
-};
-
-const labelStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.25rem',
-  textAlign: 'left',
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: '0.5rem',
-  fontSize: '1rem',
-};
-
-const buttonStyle: React.CSSProperties = {
-  padding: '0.75rem 1.25rem',
-  fontSize: '1rem',
-  cursor: 'pointer',
-};
-
-const errorStyle: React.CSSProperties = {
-  color: '#b00020',
-  maxWidth: '24rem',
-};
-
 /**
  * Render the create-or-join Family screen.
  */
@@ -129,70 +89,98 @@ export function CreateJoinFamily(): JSX.Element | null {
   };
 
   return (
-    <main style={containerStyle}>
-      <h1>Set up your family</h1>
-      <p>Create a new family to start tracking expenses, or join an existing
-        one with an invite code.</p>
+    <main className="min-h-screen flex flex-col items-center gap-8 p-6 bg-surface-container-lowest">
+      <div className="text-center mt-6 max-w-2xl">
+        <h1 className="text-headline-lg font-bold text-on-surface">
+          Set up your family
+        </h1>
+        <p className="text-on-surface-variant text-body-md mt-3">
+          Create a new family to start tracking expenses, or join an existing
+          one with an invite code.
+        </p>
+      </div>
 
-      <section style={sectionStyle} aria-labelledby="create-family-heading">
-        <h2 id="create-family-heading">Create a new family</h2>
-        <label style={labelStyle}>
-          Family name (optional)
-          <input
-            type="text"
-            value={familyName}
-            onChange={(event) => setFamilyName(event.target.value)}
-            disabled={isBusy}
-            style={inputStyle}
-            autoComplete="off"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => void handleCreate()}
-          disabled={isBusy}
-          aria-busy={isCreating}
-          style={buttonStyle}
+      <div className="grid w-full max-w-4xl gap-grid_gap md:grid-cols-2">
+        <section
+          className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
+          aria-labelledby="create-family-heading"
         >
-          {isCreating ? 'Creating…' : 'Create family'}
-        </button>
-      </section>
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-primary-container text-2xl" aria-hidden="true">
+              group_add
+            </span>
+            <h2 id="create-family-heading" className="text-headline-md font-semibold text-on-surface">
+              Create a new family
+            </h2>
+          </div>
+          <label className="flex flex-col gap-1.5 text-left text-sm text-on-surface-variant">
+            Family name (optional)
+            <input
+              type="text"
+              value={familyName}
+              onChange={(event) => setFamilyName(event.target.value)}
+              disabled={isBusy}
+              className="ghost-input px-3 py-2.5 text-body-md"
+              autoComplete="off"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => void handleCreate()}
+            disabled={isBusy}
+            aria-busy={isCreating}
+            className="btn-primary px-5 py-3 mt-auto"
+          >
+            {isCreating ? 'Creating…' : 'Create family'}
+          </button>
+        </section>
 
-      <section style={sectionStyle} aria-labelledby="join-family-heading">
-        <h2 id="join-family-heading">Join an existing family</h2>
-        <label style={labelStyle}>
-          Invite code
-          <input
-            type="text"
-            value={inviteCode}
-            onChange={(event) => {
-              setInviteCode(event.target.value);
-              // Clear a stale invalid-code message as the member edits.
-              if (invalidCode) {
-                setInvalidCode(false);
-              }
-            }}
-            disabled={isBusy}
-            style={inputStyle}
-            autoComplete="off"
-            aria-invalid={invalidCode}
-          />
-        </label>
-        {invalidCode && (
-          <p role="alert" style={errorStyle}>
-            {INVALID_INVITE_CODE_MESSAGE}
-          </p>
-        )}
-        <button
-          type="button"
-          onClick={() => void handleJoin()}
-          disabled={isBusy || inviteCode.trim() === ''}
-          aria-busy={isJoining}
-          style={buttonStyle}
+        <section
+          className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
+          aria-labelledby="join-family-heading"
         >
-          {isJoining ? 'Joining…' : 'Join'}
-        </button>
-      </section>
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-primary-container text-2xl" aria-hidden="true">
+              key
+            </span>
+            <h2 id="join-family-heading" className="text-headline-md font-semibold text-on-surface">
+              Join an existing family
+            </h2>
+          </div>
+          <label className="flex flex-col gap-1.5 text-left text-sm text-on-surface-variant">
+            Invite code
+            <input
+              type="text"
+              value={inviteCode}
+              onChange={(event) => {
+                setInviteCode(event.target.value);
+                // Clear a stale invalid-code message as the member edits.
+                if (invalidCode) {
+                  setInvalidCode(false);
+                }
+              }}
+              disabled={isBusy}
+              className="ghost-input px-3 py-2.5 text-body-md font-mono tracking-widest"
+              autoComplete="off"
+              aria-invalid={invalidCode}
+            />
+          </label>
+          {invalidCode && (
+            <p role="alert" className="text-error text-sm">
+              {INVALID_INVITE_CODE_MESSAGE}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleJoin()}
+            disabled={isBusy || inviteCode.trim() === ''}
+            aria-busy={isJoining}
+            className="btn-primary px-5 py-3 mt-auto"
+          >
+            {isJoining ? 'Joining…' : 'Join'}
+          </button>
+        </section>
+      </div>
     </main>
   );
 }

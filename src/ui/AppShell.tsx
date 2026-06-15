@@ -4,10 +4,13 @@
  *
  * `AppShell` provides the persistent chrome that wraps the guarded screens:
  *
- * - a header showing the resolved member label from {@link useAuth}
- *   (`displayName ?? email ?? 'Signed in'`, Req 1.5);
- * - a sign-out control that ends the Session via `signOut()` (Req 1.6);
- * - primary navigation links to the guarded screens (`/`, `/expenses`, `/add`);
+ * - a fixed left sidebar (desktop) with the "FamilyVault" wordmark and primary
+ *   navigation links to the guarded screens (`/`, `/expenses`, `/add`,
+ *   `/settings`), each with an active state;
+ * - a responsive bottom navigation bar for narrow viewports;
+ * - a top app bar showing the resolved member label from {@link useAuth}
+ *   (`displayName ?? email ?? 'Signed in'`, Req 1.5) and a sign-out control
+ *   that ends the Session via `signOut()` (Req 1.6);
  * - an {@link InstallPrompt} install affordance, surfaced when the browser
  *   reports the app is installable (Req 5.4);
  * - an offline banner shown while the device has no network connection
@@ -19,8 +22,6 @@
  *
  * It renders either an explicit `children` payload or, when used as a layout
  * route, the matched child route via {@link Outlet}.
- *
- * Styling is intentionally minimal/inline for the MVP.
  */
 import { useCallback } from 'react';
 import { NavLink, Outlet, type To } from 'react-router-dom';
@@ -48,59 +49,35 @@ export interface AppShellProps {
 }
 
 /** Primary navigation targets for the guarded area. */
-const NAV_LINKS: ReadonlyArray<{ to: To; label: string; end?: boolean }> = [
-  { to: '/', label: 'Dashboard', end: true },
-  { to: '/expenses', label: 'Expenses' },
-  { to: '/add', label: 'Add expense' },
-  { to: '/settings', label: 'Family' },
+const NAV_LINKS: ReadonlyArray<{
+  to: To;
+  label: string;
+  icon: string;
+  end?: boolean;
+}> = [
+  { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
+  { to: '/expenses', label: 'Transactions', icon: 'receipt_long' },
+  { to: '/add', label: 'Add expense', icon: 'add_circle' },
+  { to: '/settings', label: 'Family', icon: 'group' },
 ];
 
-const headerStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: '1rem',
-  flexWrap: 'wrap',
-  padding: '0.75rem 1rem',
-  borderBottom: '1px solid #ddd',
-};
+/** Shared className for a desktop sidebar nav link, depending on active state. */
+function sidebarLinkClass(isActive: boolean): string {
+  const base =
+    'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200';
+  return isActive
+    ? `${base} text-primary-container bg-primary-container/10 border-r-2 border-primary-container`
+    : `${base} text-on-surface-variant hover:text-primary-container hover:bg-surface-bright/10`;
+}
 
-const navStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '1rem',
-  alignItems: 'center',
-};
-
-const memberAreaStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '0.75rem',
-  alignItems: 'center',
-};
-
-const offlineBannerStyle: React.CSSProperties = {
-  padding: '0.5rem 1rem',
-  background: '#fff4ce',
-  borderBottom: '1px solid #e6d27a',
-  textAlign: 'center',
-};
-
-const pwaBannerStyle: React.CSSProperties = {
-  padding: '0.5rem 1rem',
-  background: '#fde7e9',
-  borderBottom: '1px solid #e6a0a6',
-  textAlign: 'center',
-};
-
-const migrationBannerStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '0.75rem',
-  padding: '0.5rem 1rem',
-  background: '#fff4ce',
-  borderBottom: '1px solid #e6d27a',
-  textAlign: 'center',
-};
+/** Shared className for a mobile bottom-nav link, depending on active state. */
+function bottomLinkClass(isActive: boolean): string {
+  const base =
+    'flex flex-col items-center justify-center gap-0.5 flex-1 py-2 text-[11px] font-medium transition-colors';
+  return isActive
+    ? `${base} text-primary-container`
+    : `${base} text-on-surface-variant`;
+}
 
 /**
  * Persistent layout shell for authenticated screens.
@@ -125,67 +102,156 @@ export function AppShell({ children, isOffline }: AppShellProps): JSX.Element {
   }, [signOut]);
 
   return (
-    <div data-component="app-shell">
-      <header style={headerStyle}>
-        <nav aria-label="Primary" style={navStyle}>
-          {NAV_LINKS.map(({ to, label, end }) => (
-            <NavLink key={label} to={to} end={end}>
-              {label}
+    <div data-component="app-shell" className="min-h-screen bg-surface-container-lowest">
+      {/* Fixed desktop sidebar (hidden on narrow viewports). */}
+      <aside className="hidden md:flex fixed left-0 top-0 h-screen w-64 flex-col py-8 border-r border-outline-variant/30 bg-surface-container-lowest/95 backdrop-blur-xl z-50">
+        <div className="px-6 mb-10">
+          <h1 className="text-[28px] font-extrabold tracking-tighter text-primary-container neon-glow leading-tight">
+            FamilyVault
+          </h1>
+          <p className="text-label-caps uppercase text-on-surface-variant mt-1">
+            Family Ledger
+          </p>
+        </div>
+
+        <nav aria-label="Primary" className="flex-1 px-4 space-y-2">
+          {NAV_LINKS.map(({ to, label, icon, end }) => (
+            <NavLink
+              key={label}
+              to={to}
+              end={end}
+              className={({ isActive }) => sidebarLinkClass(isActive)}
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">
+                {icon}
+              </span>
+              <span className="text-body-md">{label}</span>
             </NavLink>
           ))}
         </nav>
 
-        <div style={memberAreaStyle}>
-          {/* Install affordance, shown only when the app is installable (Req 5.4). */}
-          <InstallPrompt />
-          {/* Cross-platform manual install steps (covers iOS Safari etc., Req 5.4). */}
-          <InstallInstructions />
-          {/* Resolved member label: displayName ?? email ?? 'Signed in' (Req 1.5). */}
-          <span data-testid="member-label">{memberLabel ?? 'Signed in'}</span>
-          {/* Sign-out control ends the Session (Req 1.6). */}
-          <button type="button" onClick={handleSignOut}>
-            Sign out
-          </button>
+        <div className="px-4 mt-auto">
+          <NavLink to="/add" className="btn-primary w-full py-3 flex items-center justify-center gap-2">
+            <span className="material-symbols-outlined" aria-hidden="true">
+              add
+            </span>
+            Add Transaction
+          </NavLink>
         </div>
-      </header>
+      </aside>
 
-      {/*
-        Service-worker registration failure: the app keeps working from the
-        network but offline capabilities are unavailable (Req 5.3).
-      */}
-      {offlineCapabilitiesUnavailable ? (
-        <div role="status" aria-live="polite" style={pwaBannerStyle}>
-          Offline capabilities are unavailable.
-        </div>
-      ) : null}
-
-      {/* Offline banner over the cached shell while disconnected (Req 5.6). */}
-      {offline ? (
-        <div role="status" aria-live="polite" style={offlineBannerStyle}>
-          Expense data requires a network connection.
-        </div>
-      ) : null}
-
-      {/*
-        Non-fatal migration-failure notice: when first-family creation could
-        not migrate some legacy expenses, surface a dismissible indication of
-        the affected expenses (Req 10.5). The family is still created; the
-        affected legacy documents are left unchanged.
-      */}
-      {migrationFailures.length > 0 ? (
-        <div role="alert" style={migrationBannerStyle} data-testid="migration-failure-banner">
-          <span>
-            {migrationFailures.length === 1
-              ? "Some older data couldn't be migrated: 1 expense was left unchanged."
-              : `Some older data couldn't be migrated: ${migrationFailures.length} expenses were left unchanged.`}
+      {/* Main canvas: offset by the sidebar width on desktop. */}
+      <div className="md:ml-64 flex flex-col min-h-screen">
+        {/* Top app bar. */}
+        <header className="sticky top-0 z-40 flex items-center justify-between gap-4 flex-wrap px-5 md:px-container_padding h-auto md:h-20 py-3 md:py-0 bg-background/80 backdrop-blur-2xl border-b border-outline-variant/20">
+          {/* Compact wordmark on mobile (sidebar is hidden there). */}
+          <span className="md:hidden text-xl font-extrabold tracking-tighter text-primary-container neon-glow">
+            FamilyVault
           </span>
-          <button type="button" onClick={dismissMigrationFailures}>
-            Dismiss
-          </button>
-        </div>
-      ) : null}
 
-      <main>{children ?? <Outlet />}</main>
+          <div className="flex items-center gap-3 md:gap-4 ml-auto">
+            {/* Install affordance, shown only when the app is installable (Req 5.4). */}
+            <InstallPrompt />
+            {/* Cross-platform manual install steps (covers iOS Safari etc., Req 5.4). */}
+            <InstallInstructions />
+            {/* Resolved member label: displayName ?? email ?? 'Signed in' (Req 1.5). */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-high/40 border border-outline-variant/20">
+              <span className="material-symbols-outlined text-primary-container text-lg" aria-hidden="true">
+                account_circle
+              </span>
+              <span data-testid="member-label" className="text-sm text-on-surface max-w-[12rem] truncate">
+                {memberLabel ?? 'Signed in'}
+              </span>
+            </div>
+            {/* Sign-out control ends the Session (Req 1.6). */}
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="btn-ghost px-4 py-2 text-sm flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-base" aria-hidden="true">
+                logout
+              </span>
+              Sign out
+            </button>
+          </div>
+        </header>
+
+        {/*
+          Service-worker registration failure: the app keeps working from the
+          network but offline capabilities are unavailable (Req 5.3).
+        */}
+        {offlineCapabilitiesUnavailable ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="px-5 md:px-container_padding py-2.5 text-center text-sm text-tertiary-container bg-tertiary-container/10 border-b border-tertiary-container/20"
+          >
+            Offline capabilities are unavailable.
+          </div>
+        ) : null}
+
+        {/* Offline banner over the cached shell while disconnected (Req 5.6). */}
+        {offline ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="px-5 md:px-container_padding py-2.5 text-center text-sm text-tertiary-container bg-tertiary-container/10 border-b border-tertiary-container/20"
+          >
+            Expense data requires a network connection.
+          </div>
+        ) : null}
+
+        {/*
+          Non-fatal migration-failure notice: when first-family creation could
+          not migrate some legacy expenses, surface a dismissible indication of
+          the affected expenses (Req 10.5). The family is still created; the
+          affected legacy documents are left unchanged.
+        */}
+        {migrationFailures.length > 0 ? (
+          <div
+            role="alert"
+            data-testid="migration-failure-banner"
+            className="flex items-center justify-center gap-3 px-5 md:px-container_padding py-2.5 text-center text-sm text-error bg-error-container/20 border-b border-error/20"
+          >
+            <span>
+              {migrationFailures.length === 1
+                ? "Some older data couldn't be migrated: 1 expense was left unchanged."
+                : `Some older data couldn't be migrated: ${migrationFailures.length} expenses were left unchanged.`}
+            </span>
+            <button
+              type="button"
+              onClick={dismissMigrationFailures}
+              className="btn-ghost px-3 py-1 text-xs"
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
+
+        {/* Page content. Extra bottom padding on mobile to clear the bottom nav. */}
+        <main className="flex-1 pb-24 md:pb-0">{children ?? <Outlet />}</main>
+      </div>
+
+      {/* Mobile bottom navigation (replaces the sidebar on narrow viewports). */}
+      <nav
+        aria-label="Primary"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-stretch bg-surface-container-lowest/95 backdrop-blur-xl border-t border-outline-variant/30"
+      >
+        {NAV_LINKS.map(({ to, label, icon, end }) => (
+          <NavLink
+            key={label}
+            to={to}
+            end={end}
+            className={({ isActive }) => bottomLinkClass(isActive)}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">
+              {icon}
+            </span>
+            <span>{label}</span>
+          </NavLink>
+        ))}
+      </nav>
     </div>
   );
 }

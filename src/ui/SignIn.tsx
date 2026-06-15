@@ -29,28 +29,6 @@ import { InstallInstructions } from './InstallInstructions';
 const SIGN_IN_ERROR_MESSAGE =
   'Sign-in could not be completed. Please try again.';
 
-const containerStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '1rem',
-  minHeight: '100vh',
-  padding: '1.5rem',
-  textAlign: 'center',
-};
-
-const buttonStyle: React.CSSProperties = {
-  padding: '0.75rem 1.25rem',
-  fontSize: '1rem',
-  cursor: 'pointer',
-};
-
-const errorStyle: React.CSSProperties = {
-  color: '#b00020',
-  maxWidth: '24rem',
-};
-
 /**
  * Render the sign-in landing screen.
  */
@@ -72,32 +50,47 @@ export function SignIn(): JSX.Element {
   };
 
   return (
-    <main style={containerStyle}>
-      <h1>Family Expense Tracker</h1>
-      <p>Sign in to record and review your family's expenses.</p>
+    <main className="min-h-screen flex flex-col items-center justify-center gap-6 p-6 bg-surface-container-lowest">
+      <div className="glass-card glass-card-hover w-full max-w-md p-card_padding flex flex-col items-center gap-5 text-center">
+        <div>
+          <h1 className="text-4xl font-extrabold tracking-tighter text-primary-container neon-glow">
+            FamilyVault
+          </h1>
+          <p className="text-label-caps uppercase text-on-surface-variant mt-2">
+            Family Expense Tracker
+          </p>
+        </div>
 
-      {hasError && (
-        <p role="alert" style={errorStyle}>
-          {SIGN_IN_ERROR_MESSAGE}
+        <p className="text-on-surface-variant text-body-md">
+          Sign in to record and review your family's expenses.
         </p>
-      )}
 
-      <button
-        type="button"
-        onClick={handleSignIn}
-        disabled={isSigningIn}
-        aria-busy={isSigningIn}
-        style={buttonStyle}
-      >
-        {isSigningIn ? 'Signing in…' : 'Sign in with Google'}
-      </button>
+        {hasError && (
+          <p role="alert" className="text-error text-sm max-w-sm">
+            {SIGN_IN_ERROR_MESSAGE}
+          </p>
+        )}
 
-      {/*
-        Install affordance for unauthenticated visitors. On iOS Safari there is
-        no automatic install popup (the platform does not support it), so we
-        always offer manual "Add to Home Screen" steps here.
-      */}
-      <InstallInstructions />
+        <button
+          type="button"
+          onClick={handleSignIn}
+          disabled={isSigningIn}
+          aria-busy={isSigningIn}
+          className="btn-primary w-full py-3 px-5 flex items-center justify-center gap-2"
+        >
+          <span className="material-symbols-outlined text-lg" aria-hidden="true">
+            login
+          </span>
+          {isSigningIn ? 'Signing in…' : 'Sign in with Google'}
+        </button>
+
+        {/*
+          Install affordance for unauthenticated visitors. On iOS Safari there is
+          no automatic install popup (the platform does not support it), so we
+          always offer manual "Add to Home Screen" steps here.
+        */}
+        <InstallInstructions />
+      </div>
     </main>
   );
 }
