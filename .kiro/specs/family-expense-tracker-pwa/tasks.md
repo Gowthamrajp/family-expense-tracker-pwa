@@ -272,20 +272,20 @@ security rules, and one-time data migration. Property test sub-tasks (`*`) cover
 design Properties 9–13 with fast-check (minimum 100 iterations, tagged
 `// Feature: family-expense-tracker-pwa, Property {number}: {property_text}`).
 
-- [ ] 19. Expand the domain type model
+- [x] 19. Expand the domain type model
   - Update `src/domain/types.ts`: add `Family`, redefine `Category` as `{ id, name }`, add `SubSource` and `SubSourceInput` and `SubSourceFormInput`, revise `ExpenseInput` (`categoryId`, optional `subSourceId`) and `Expense` (add `recordedByName`), add `FamilyDocument`/`CategoryDocument`/`SubSourceDocument`/`UserDocument`/`InviteCodeDocument`, `LegacyExpenseDocument`, and `MigrationPlan`. Keep `Source` as the fixed enum and `CATEGORIES` removed/deprecated in favor of family data.
   - _Requirements: 2.2, 3.2, 4.3, 5.2, 5.4, 10.1_
 
-- [ ] 20. Implement invite-code domain logic
-  - [ ] 20.1 Implement `src/domain/inviteCode.ts` with `generateInviteCode(rng)`, `isWellFormedInviteCode`, and `normalizeInviteCode` using an unambiguous uppercase base32 alphabet (no 0/O/1/I) and the documented length bound (6–8)
+- [x] 20. Implement invite-code domain logic
+  - [x] 20.1 Implement `src/domain/inviteCode.ts` with `generateInviteCode(rng)`, `isWellFormedInviteCode`, and `normalizeInviteCode` using an unambiguous uppercase base32 alphabet (no 0/O/1/I) and the documented length bound (6–8)
     - _Requirements: 2.2, 2.4_
   - [ ]* 20.2 Write property test for invite-code generation
     - **Property 9: Invite-code generation is well-formed and self-normalizing**
     - **Validates: Requirements 2.2, 2.4**
     - Feed an arbitrary randomness source; assert charset, length bound, and normalize/isWellFormed self-consistency; min 100 iterations; tag with the design property comment
 
-- [ ] 21. Implement sub-source domain logic
-  - [ ] 21.1 Implement `src/domain/subSource.ts` with `validateLast4` (exactly 4 digits or absent) and `validateSubSource` (non-empty nickname + optional last4; output contains only source/nickname/last4)
+- [x] 21. Implement sub-source domain logic
+  - [x] 21.1 Implement `src/domain/subSource.ts` with `validateLast4` (exactly 4 digits or absent) and `validateSubSource` (non-empty nickname + optional last4; output contains only source/nickname/last4)
     - _Requirements: 5.2, 5.3, 5.4, 5.5, 5.6_
   - [ ]* 21.2 Write property test for last-4 validation
     - **Property 10: Last-4 validation accepts exactly four digits and rejects everything else**
@@ -296,58 +296,58 @@ design Properties 9–13 with fast-check (minimum 100 iterations, tagged
     - **Validates: Requirements 5.2, 5.3, 5.6, 9.5**
     - Arbitrary source/nickname/last4; assert accept/reject and that the validated output shape is exactly {source, nickname, last4?}; min 100 iterations; tag with the design property comment
 
-- [ ] 22. Implement category domain logic
-  - [ ] 22.1 Implement `src/domain/category.ts` with `normalizeCategoryName`, `validateNewCategory(raw, existing)`, and `DEFAULT_CATEGORY_SET`
+- [x] 22. Implement category domain logic
+  - [x] 22.1 Implement `src/domain/category.ts` with `normalizeCategoryName`, `validateNewCategory(raw, existing)`, and `DEFAULT_CATEGORY_SET`
     - _Requirements: 4.1, 4.3, 4.4, 4.5_
   - [ ]* 22.2 Write property test for category-name validation
     - **Property 12: Category-name validation enforces non-empty, case-insensitive uniqueness**
     - **Validates: Requirements 4.3, 4.4, 4.5**
     - Arbitrary existing-name lists + candidates from case/whitespace mutations; min 100 iterations; tag with the design property comment
 
-- [ ] 23. Implement migration domain logic
-  - [ ] 23.1 Implement `src/domain/migration.ts` with `planMigration(legacy, existingCategories)` and `isExpenseMigrated(legacyId, migrated)`, producing an idempotent, field-preserving `MigrationPlan`
+- [x] 23. Implement migration domain logic
+  - [x] 23.1 Implement `src/domain/migration.ts` with `planMigration(legacy, existingCategories)` and `isExpenseMigrated(legacyId, migrated)`, producing an idempotent, field-preserving `MigrationPlan`
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
   - [ ]* 23.2 Write property test for migration planning
     - **Property 13: Migration preserves every field, maps every category, and is idempotent**
     - **Validates: Requirements 10.1, 10.2, 10.3, 10.4, 10.5**
     - Arbitrary legacy expenses, existing categories, already-migrated id sets; assert field preservation, category mapping completeness, failure keying, idempotence; min 100 iterations; tag with the design property comment
 
-- [ ] 24. Revise expense mapping for category/sub-source references
+- [x] 24. Revise expense mapping for category/sub-source references
   - Update `src/domain/expenseMapper.ts`: `toFirestore`/`fromFirestore` carry `categoryId`, optional `subSourceId`, and `recordedByName`; add `resolveLabels(exp, cats, subs)` producing the display row (category name, sub-source nickname)
   - _Requirements: 3.3, 6.2, 6.3_
 
-- [ ] 25. Checkpoint - expansion domain layer
+- [x] 25. Checkpoint - expansion domain layer
   - Ensure build/typecheck and any added domain tests pass.
 
-- [ ] 26. Implement family-scoped data layer
-  - [ ] 26.1 Implement `src/data/familyRepository.ts`: `createFamily` (generate unique invite code with bounded collision retry in a transaction, write `families/{id}`, `inviteCodes/{code}`, `users/{uid}.familyId`, seed default categories, and trigger first-family migration), `joinFamilyByInviteCode` (resolve via `inviteCodes/{code}` get-by-id, transactional append to `memberUids` + set `users/{uid}.familyId`, reject invalid), `getFamilyForMember`, `listMembers`
+- [x] 26. Implement family-scoped data layer
+  - [x] 26.1 Implement `src/data/familyRepository.ts`: `createFamily` (generate unique invite code with bounded collision retry in a transaction, write `families/{id}`, `inviteCodes/{code}`, `users/{uid}.familyId`, seed default categories, and trigger first-family migration), `joinFamilyByInviteCode` (resolve via `inviteCodes/{code}` get-by-id, transactional append to `memberUids` + set `users/{uid}.familyId`, reject invalid), `getFamilyForMember`, `listMembers`
     - _Requirements: 2.2, 2.3, 2.4, 2.5, 2.6, 4.1, 10.1_
-  - [ ] 26.2 Implement `src/data/categoryRepository.ts`: `subscribeToCategories(familyId, ...)`, `addCategory(familyId, name)`, `seedDefaults(familyId)`
+  - [x] 26.2 Implement `src/data/categoryRepository.ts`: `subscribeToCategories(familyId, ...)`, `addCategory(familyId, name)`, `seedDefaults(familyId)`
     - _Requirements: 4.1, 4.2, 4.3, 4.6_
-  - [ ] 26.3 Implement `src/data/subSourceRepository.ts`: `subscribeToSubSources(familyId, ...)`, `addSubSource(familyId, input)`
+  - [x] 26.3 Implement `src/data/subSourceRepository.ts`: `subscribeToSubSources(familyId, ...)`, `addSubSource(familyId, input)`
     - _Requirements: 3.7, 5.1, 5.2_
-  - [ ] 26.4 Revise `src/data/expenseRepository.ts` to be family-scoped (operate under `families/{familyId}/expenses`, carry `categoryId`/`subSourceId`/`recordedByName`)
+  - [x] 26.4 Revise `src/data/expenseRepository.ts` to be family-scoped (operate under `families/{familyId}/expenses`, carry `categoryId`/`subSourceId`/`recordedByName`)
     - _Requirements: 3.2, 3.3, 3.8, 6.1, 6.5_
   - [ ]* 26.5 Write Firestore emulator integration tests for the family-scoped repositories (create/join/seed/migrate, category add, sub-source add, expense add+subscribe)
     - _Requirements: 2.2, 2.3, 4.1, 4.3, 5.2, 6.1_
 
-- [ ] 27. Rewrite Firestore security rules for family scoping
-  - [ ] 27.1 Rewrite `firestore.rules`: `users/{uid}` self-only; `inviteCodes/{code}` get-by-id only (no list), create allowed; `families/{familyId}` member-read, create-with-creator, update grows `memberUids`; family subcollections (`expenses`, `categories`, `subSources`) gated on membership; `expenses` create requires `recordedBy == uid`; `subSources` create allowlists exactly `source`/`nickname`/`last4` with `last4` matching `^[0-9]{4}$`; update/delete denied across the board
+- [x] 27. Rewrite Firestore security rules for family scoping
+  - [x] 27.1 Rewrite `firestore.rules`: `users/{uid}` self-only; `inviteCodes/{code}` get-by-id only (no list), create allowed; `families/{familyId}` member-read, create-with-creator, update grows `memberUids`; family subcollections (`expenses`, `categories`, `subSources`) gated on membership; `expenses` create requires `recordedBy == uid`; `subSources` create allowlists exactly `source`/`nickname`/`last4` with `last4` matching `^[0-9]{4}$`; update/delete denied across the board
     - _Requirements: 9.1, 9.2, 9.3, 9.5, 5.6_
   - [ ]* 27.2 Write security-rules emulator tests proving a member of family A cannot read/write family B's expenses/categories/subSources, unauthenticated access is denied, and a sub-source create with an extra field or bad last4 is rejected
     - _Requirements: 9.1, 9.2, 9.3, 9.5_
 
-- [ ] 28. Implement family/category/sub-source state layer
-  - [ ] 28.1 Implement `FamilyProvider` + `useFamily` exposing `{ family, members, status, createFamily, joinFamily }`, resolving the member's family after auth
+- [x] 28. Implement family/category/sub-source state layer
+  - [x] 28.1 Implement `FamilyProvider` + `useFamily` exposing `{ family, members, status, createFamily, joinFamily }`, resolving the member's family after auth
     - _Requirements: 1.11, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
-  - [ ] 28.2 Implement `useCategories` (family-scoped subscribe + add with validation feedback)
+  - [x] 28.2 Implement `useCategories` (family-scoped subscribe + add with validation feedback)
     - _Requirements: 4.2, 4.3, 4.4, 4.5, 4.6_
-  - [ ] 28.3 Implement `useSubSources` (family-scoped subscribe + add + `forSource`)
+  - [x] 28.3 Implement `useSubSources` (family-scoped subscribe + add + `forSource`)
     - _Requirements: 3.7, 5.1, 5.2, 5.7_
-  - [ ] 28.4 Revise `useExpenses` to subscribe scoped to the active `familyId`
+  - [x] 28.4 Revise `useExpenses` to subscribe scoped to the active `familyId`
     - _Requirements: 6.1, 6.5, 9.3_
 
-- [ ] 29. Checkpoint - expansion data and state layers
+- [x] 29. Checkpoint - expansion data and state layers
   - Ensure build/typecheck and any added tests pass.
 
 - [ ] 30. Implement family onboarding and settings UI

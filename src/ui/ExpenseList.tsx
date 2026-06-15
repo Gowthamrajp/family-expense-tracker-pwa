@@ -151,14 +151,22 @@ function ExpenseRow({ expense }: ExpenseRowProps): JSX.Element {
 /**
  * Render the recorded-expense list with loading, empty, and error states.
  *
+ * @param familyId - The active family's id, forwarded to {@link useExpenses}.
+ *   Defaults to `null` until the `FamilyProvider`/routing wiring lands
+ *   (tasks 28.4/31), at which point the active family id is passed in.
  * @param active - Whether a Session is active; forwarded to {@link useExpenses}.
  *   Defaults to `true` (the hook's own default), matching the guarded route
  *   where this screen is only mounted within an active Session.
  *
  * Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9
  */
-export function ExpenseList({ active = true }: { active?: boolean } = {}): JSX.Element {
-  const { expenses, status, retry } = useExpenses(active);
+export function ExpenseList({
+  familyId = null,
+  active = true,
+}: { familyId?: string | null; active?: boolean } = {}): JSX.Element {
+  // SHIM (tasks 28.4/31): `familyId` defaults to `null` so the hook stays idle
+  // until `useFamily` supplies the active family id.
+  const { expenses, status, retry } = useExpenses(familyId, active);
 
   return (
     <section data-screen="expenses" aria-label="Recorded expenses" style={containerStyle}>

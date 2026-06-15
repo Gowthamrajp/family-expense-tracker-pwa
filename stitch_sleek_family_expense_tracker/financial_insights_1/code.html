@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Analytics &amp; Insights | FamilyVault</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed-variant": "#544600",
+                    "secondary": "#c6c6c9",
+                    "on-tertiary-fixed": "#221b00",
+                    "primary-fixed-dim": "#00dce5",
+                    "secondary-fixed": "#e2e2e5",
+                    "on-primary-fixed": "#002021",
+                    "surface": "#121314",
+                    "tertiary": "#fff9f0",
+                    "on-secondary-fixed-variant": "#454749",
+                    "inverse-surface": "#e4e2e3",
+                    "primary-fixed": "#63f7ff",
+                    "surface-container-low": "#1b1c1d",
+                    "background": "#121314",
+                    "surface-bright": "#39393a",
+                    "surface-container-highest": "#343536",
+                    "outline-variant": "#3a494a",
+                    "secondary-fixed-dim": "#c6c6c9",
+                    "surface-dim": "#121314",
+                    "on-tertiary-container": "#736000",
+                    "on-surface-variant": "#b9caca",
+                    "surface-container-lowest": "#0d0e0f",
+                    "on-primary-container": "#006c71",
+                    "surface-variant": "#343536",
+                    "primary": "#e9feff",
+                    "tertiary-fixed": "#ffe16c",
+                    "on-primary-fixed-variant": "#004f53",
+                    "tertiary-container": "#ffdb3f",
+                    "on-error": "#690005",
+                    "secondary-container": "#454749",
+                    "on-background": "#e4e2e3",
+                    "on-secondary": "#2f3133",
+                    "on-secondary-container": "#b4b5b7",
+                    "outline": "#849495",
+                    "surface-container": "#1f2021",
+                    "inverse-on-surface": "#303031",
+                    "on-primary": "#003739",
+                    "inverse-primary": "#00696e",
+                    "error": "#ffb4ab",
+                    "surface-tint": "#00dce5",
+                    "surface-container-high": "#292a2b",
+                    "tertiary-fixed-dim": "#e7c427",
+                    "primary-container": "#00f5ff",
+                    "on-tertiary": "#3a3000",
+                    "on-surface": "#e4e2e3",
+                    "on-secondary-fixed": "#1a1c1e",
+                    "error-container": "#93000a",
+                    "on-error-container": "#ffdad6"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "container_padding": "40px",
+                    "card_padding": "32px",
+                    "grid_gap": "24px",
+                    "section_margin": "64px",
+                    "base": "8px"
+            },
+            "fontFamily": {
+                    "display-xl": ["Inter"],
+                    "mono-data": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "body-md": ["Inter"],
+                    "label-caps": ["Inter"]
+            },
+            "fontSize": {
+                    "display-xl": ["72px", {"lineHeight": "80px", "letterSpacing": "-0.04em", "fontWeight": "800"}],
+                    "mono-data": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                    "headline-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.08em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #121314;
+            color: #e4e2e3;
+            font-family: 'Inter', sans-serif;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+        }
+        .neon-glow {
+            box-shadow: 0 0 15px rgba(0, 245, 255, 0.2);
+        }
+        .neon-glow-strong {
+            box-shadow: 0 0 25px rgba(0, 245, 255, 0.4);
+        }
+        .heatmap-cell {
+            transition: all 0.2s ease;
+        }
+        .heatmap-cell:hover {
+            transform: scale(1.1);
+            z-index: 10;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0d0e0f;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #343536;
+            border-radius: 10px;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="overflow-x-hidden">
+<!-- SideNavBar Shell -->
+<nav class="h-screen w-64 fixed left-0 top-0 border-r border-outline-variant backdrop-blur-xl border-r border-outline-variant/30 flex flex-col py-8 z-50 bg-surface-container-lowest dark:bg-surface-container-lowest">
+<div class="px-6 mb-10">
+<span class="font-display-xl text-primary-container tracking-tighter text-[32px]">Family Finance</span>
+<p class="font-label-caps text-label-caps text-secondary opacity-60">Premium Tier</p>
+</div>
+<div class="flex-1 flex flex-col gap-1">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-primary-container hover:bg-surface-bright/10 transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-body-md text-body-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-primary-container hover:bg-surface-bright/10 transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">receipt_long</span>
+<span class="font-body-md text-body-md">Transactions</span>
+</a>
+<!-- Active State: Analytics -->
+<a class="flex items-center gap-3 px-4 py-3 text-primary-container bg-primary-container/10 border-r-2 border-primary-container scale-[0.98] transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">leaderboard</span>
+<span class="font-body-md text-body-md font-bold">Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-primary-container hover:bg-surface-bright/10 transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">savings</span>
+<span class="font-body-md text-body-md">Savings Goals</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-primary-container hover:bg-surface-bright/10 transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</a>
+</div>
+<div class="mt-auto px-4 flex flex-col gap-4">
+<button class="w-full py-3 bg-primary-container text-on-primary font-bold rounded-xl neon-glow hover:neon-glow-strong transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">add</span>
+                Add Transaction
+            </button>
+<div class="pt-6 border-t border-outline-variant/20">
+<a class="flex items-center gap-3 px-4 py-2 text-secondary font-label-caps text-label-caps hover:text-primary-container" href="#">
+<span class="material-symbols-outlined">visibility_off</span>
+                    Privacy Mode
+                </a>
+<a class="flex items-center gap-3 px-4 py-2 text-secondary font-label-caps text-label-caps hover:text-primary-container" href="#">
+<span class="material-symbols-outlined">help</span>
+                    Help
+                </a>
+</div>
+</div>
+</nav>
+<!-- TopAppBar Shell -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-20 z-40 backdrop-blur-2xl border-b border-outline-variant/20 bg-background/80 dark:bg-background/80 flex justify-between items-center px-container_padding">
+<div class="flex items-center gap-8">
+<h1 class="font-headline-md text-primary-container font-bold">Analytics &amp; Insights</h1>
+<nav class="hidden md:flex gap-6">
+<a class="text-on-surface-variant hover:text-on-surface font-label-caps text-label-caps transition-all" href="#">Overview</a>
+<a class="text-on-surface-variant hover:text-on-surface font-label-caps text-label-caps transition-all" href="#">Budgets</a>
+<a class="text-primary-container font-bold border-b-2 border-primary-container pb-1 font-label-caps text-label-caps" href="#">Reports</a>
+</nav>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex flex-col items-end">
+<span class="font-label-caps text-[10px] text-secondary opacity-50">Family ID: #4402</span>
+<span class="font-body-md text-body-md text-on-surface">Privacy Mode: Off</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="p-2 hover:bg-surface-container-high/50 rounded-full transition-all text-on-surface-variant">
+<span class="material-symbols-outlined">communities</span>
+</button>
+<button class="p-2 hover:bg-surface-container-high/50 rounded-full transition-all text-on-surface-variant relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-primary-container rounded-full"></span>
+</button>
+<div class="w-10 h-10 rounded-full border-2 border-primary-container p-0.5 overflow-hidden">
+<img alt="User Avatar" class="w-full h-full object-cover rounded-full" data-alt="A close-up portrait of a professional man in his late 30s with short groomed hair and a confident smile. The lighting is dramatic with cool blue rim lights reflecting the high-tech, neon-accented UI of the application. The background is softly blurred with subtle architectural lines, maintaining a high-end SaaS executive aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuADTo3PcpAa-UhKpYrYJIm79uXNCAf662HbEkzSWIfhDGaMw-l4JiLI0W7itlRDEXbMDuyvoVql6jxqzZ-IVZ6DVArVCvIC1gshAcpAt9OVOOxGxzJiQQHu5OlO6NaOBtyHsjYp8xnmd-MXnbehBZBPxoNjTf0bFMkFI6zlkjP8JXWH35KSmEt6uCpkvvEEMeCVIi5-5EKP4MiEGpMqikT4GLoEal0f81aC5LcLIzpQO3YvQd3G6Aq5aXHwn_ArSlw_0glurTEpJy30"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-20 px-container_padding pb-section_margin">
+<!-- Dashboard Hero Stats (Bento Row 1) -->
+<section class="grid grid-cols-12 gap-grid_gap mt-10">
+<!-- Main Spending Summary -->
+<div class="col-span-8 glass-card p-card_padding relative overflow-hidden group">
+
+<div class="relative z-10 flex justify-between items-start">
+<div>
+<p class="font-label-caps text-label-caps text-secondary mb-2">Total Family Spending</p>
+<h2 class="font-display-xl text-[48px] leading-tight text-on-surface">$12,450.82</h2>
+<div class="flex items-center gap-2 mt-2 text-primary-container">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span class="font-mono-data text-mono-data">+12.5% vs last month</span>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="px-4 py-2 bg-surface-container-highest rounded-lg font-label-caps text-label-caps hover:bg-primary-container hover:text-on-primary transition-all">This Month</button>
+<button class="px-4 py-2 bg-transparent border border-outline-variant rounded-lg font-label-caps text-label-caps text-secondary hover:border-primary-container transition-all">Last 3 Months</button>
+</div>
+</div>
+<!-- Mini Area Chart Visual -->
+<div class="mt-8 h-32 w-full flex items-end gap-1">
+<div class="flex-1 bg-primary-container/10 h-1/2 rounded-t-sm"></div>
+<div class="flex-1 bg-primary-container/20 h-2/3 rounded-t-sm"></div>
+<div class="flex-1 bg-primary-container/30 h-1/2 rounded-t-sm"></div>
+<div class="flex-1 bg-primary-container/40 h-3/4 rounded-t-sm"></div>
+<div class="flex-1 bg-primary-container/50 h-full rounded-t-sm border-t-2 border-primary-container shadow-[0_-5px_15px_rgba(0,245,255,0.2)]"></div>
+<div class="flex-1 bg-primary-container/40 h-5/6 rounded-t-sm"></div>
+<div class="flex-1 bg-primary-container/30 h-4/6 rounded-t-sm"></div>
+</div>
+</div>
+<!-- AI Insight Card -->
+<div class="col-span-4 glass-card p-card_padding bg-primary-container/5 border-primary-container/30 relative flex flex-col justify-between">
+<div>
+<div class="flex items-center gap-2 text-primary-container mb-4">
+<span class="material-symbols-outlined">auto_awesome</span>
+<span class="font-label-caps text-label-caps">AI INSIGHT</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-3">Dining out is up 15% this week.</h3>
+<p class="font-body-md text-body-md text-secondary opacity-80">Based on your family's recent habits, you could save approximately $240/mo by reducing weekend takeaways.</p>
+</div>
+<div class="mt-6">
+<button class="w-full py-3 bg-on-surface text-surface rounded-xl font-bold font-label-caps text-label-caps hover:bg-primary-container transition-all">Set Spending Alert</button>
+</div>
+</div>
+</section>
+<!-- Secondary Insights (Bento Row 2) -->
+<section class="grid grid-cols-12 gap-grid_gap mt-grid_gap">
+<!-- Category Distribution Donut Chart -->
+<div class="col-span-5 glass-card p-card_padding">
+<div class="flex justify-between items-center mb-8">
+<h3 class="font-headline-md text-headline-md text-on-surface">Category Distribution</h3>
+<span class="material-symbols-outlined text-secondary opacity-50 cursor-pointer">info</span>
+</div>
+<div class="flex items-center gap-8">
+<div class="relative w-48 h-48 flex items-center justify-center">
+<svg class="w-full h-full transform -rotate-90">
+<circle class="text-surface-container-highest" cx="96" cy="96" fill="transparent" r="80" stroke="currentColor" stroke-width="12"></circle>
+<circle class="text-primary-container drop-shadow-[0_0_8px_rgba(0,245,255,0.5)]" cx="96" cy="96" fill="transparent" r="80" stroke="currentColor" stroke-dasharray="502" stroke-dashoffset="150" stroke-width="12"></circle>
+<circle class="text-secondary" cx="96" cy="96" fill="transparent" r="80" stroke="currentColor" stroke-dasharray="502" stroke-dashoffset="400" stroke-width="12"></circle>
+</svg>
+<div class="absolute flex flex-col items-center">
+<span class="font-mono-data text-mono-data text-secondary">Top Category</span>
+<span class="font-headline-md text-headline-md text-on-surface">Housing</span>
+</div>
+</div>
+<ul class="flex-1 space-y-4">
+<li class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span class="font-body-md text-body-md text-secondary">Housing</span>
+</div>
+<span class="font-mono-data text-mono-data">42%</span>
+</li>
+<li class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="font-body-md text-body-md text-secondary">Groceries</span>
+</div>
+<span class="font-mono-data text-mono-data">18%</span>
+</li>
+<li class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-surface-container-highest"></span>
+<span class="font-body-md text-body-md text-secondary">Leisure</span>
+</div>
+<span class="font-mono-data text-mono-data">15%</span>
+</li>
+</ul>
+</div>
+</div>
+<!-- Comparison View -->
+<div class="col-span-7 glass-card p-card_padding">
+<div class="flex justify-between items-center mb-8">
+<h3 class="font-headline-md text-headline-md text-on-surface">This Month vs Last Month</h3>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-full bg-primary-container"></span>
+<span class="font-label-caps text-label-caps text-secondary">Current</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-full border border-primary-container/50"></span>
+<span class="font-label-caps text-label-caps text-secondary">Previous</span>
+</div>
+</div>
+</div>
+<div class="space-y-6">
+<!-- Progress Comparison 1 -->
+<div>
+<div class="flex justify-between mb-2">
+<span class="font-body-md text-body-md text-on-surface">Essentials</span>
+<span class="font-mono-data text-mono-data text-primary-container">+4.2%</span>
+</div>
+<div class="h-3 w-full bg-surface-container-highest rounded-full overflow-hidden flex relative">
+<div class="h-full bg-primary-container rounded-full neon-glow" style="width: 75%"></div>
+<div class="absolute top-0 left-0 h-full border-r-2 border-primary-container/20" style="width: 71%"></div>
+</div>
+</div>
+<!-- Progress Comparison 2 -->
+<div>
+<div class="flex justify-between mb-2">
+<span class="font-body-md text-body-md text-on-surface">Subscriptions</span>
+<span class="font-mono-data text-mono-data text-on-error">-12.8%</span>
+</div>
+<div class="h-3 w-full bg-surface-container-highest rounded-full overflow-hidden flex relative">
+<div class="h-full bg-primary-container rounded-full neon-glow" style="width: 45%"></div>
+<div class="absolute top-0 left-0 h-full border-r-2 border-primary-container/20" style="width: 58%"></div>
+</div>
+</div>
+<!-- Progress Comparison 3 -->
+<div>
+<div class="flex justify-between mb-2">
+<span class="font-body-md text-body-md text-on-surface">Entertainment</span>
+<span class="font-mono-data text-mono-data text-primary-container">+22.1%</span>
+</div>
+<div class="h-3 w-full bg-surface-container-highest rounded-full overflow-hidden flex relative">
+<div class="h-full bg-primary-container rounded-full neon-glow" style="width: 88%"></div>
+<div class="absolute top-0 left-0 h-full border-r-2 border-primary-container/20" style="width: 66%"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Spending Heatmap (Bento Row 3) -->
+<section class="mt-grid_gap">
+<div class="glass-card p-card_padding">
+<div class="flex justify-between items-center mb-8">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Spending Heatmap</h3>
+<p class="font-body-md text-body-md text-secondary opacity-60">Volume of transactions by time of day and week</p>
+</div>
+<button class="flex items-center gap-2 px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-bright/10 transition-all font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-sm">filter_list</span> Filter View
+                    </button>
+</div>
+<div class="grid grid-cols-25 gap-1 overflow-x-auto pb-4" style="grid-template-columns: repeat(25, minmax(30px, 1fr));">
+<!-- Legend column -->
+<div class="col-span-1 flex flex-col justify-between py-1 text-[10px] text-secondary opacity-50 font-label-caps">
+<span>Mon</span>
+<span>Wed</span>
+<span>Fri</span>
+<span>Sun</span>
+</div>
+<!-- Heatmap Grid (Simplified rendering for demo) -->
+<!-- We'll use a loop-like structure with random intensities -->
+<div class="col-span-24 grid grid-cols-24 gap-1">
+<!-- Hour Labels -->
+<div class="col-span-24 grid grid-cols-24 gap-1 mb-2 text-[10px] text-secondary opacity-50 font-label-caps">
+<span class="text-center">12a</span>
+<span class="text-center"></span><span class="text-center"></span><span class="text-center"></span>
+<span class="text-center">4a</span>
+<span class="text-center"></span><span class="text-center"></span><span class="text-center"></span>
+<span class="text-center">8a</span>
+<span class="text-center"></span><span class="text-center"></span><span class="text-center"></span>
+<span class="text-center">12p</span>
+<span class="text-center"></span><span class="text-center"></span><span class="text-center"></span>
+<span class="text-center">4p</span>
+<span class="text-center"></span><span class="text-center"></span><span class="text-center"></span>
+<span class="text-center">8p</span>
+<span class="text-center"></span><span class="text-center"></span><span class="text-center"></span>
+</div>
+<!-- Cells -->
+<!-- Row 1: Mon -->
+<div class="col-span-24 grid grid-cols-24 gap-1">
+<div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/20 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/40 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/60 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/80 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/90 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/80 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/60 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/40 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/20 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/40 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/60 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/80 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/60 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/40 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/20 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div>
+</div>
+<!-- Row 2: Tue (Skip for brevity but similar pattern) -->
+<div class="col-span-24 grid grid-cols-24 gap-1 opacity-60">
+<div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/20 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/30 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/50 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/70 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/80 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/100 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/80 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/60 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/40 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/20 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/30 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/50 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/70 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/50 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/30 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div>
+</div>
+<!-- Row 3: Wed (Highlighting lunch rush) -->
+<div class="col-span-24 grid grid-cols-24 gap-1">
+<div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/20 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/40 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/60 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/80 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/90 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/100 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/90 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/80 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/60 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/40 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/60 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/80 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/100 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/80 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/40 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/20 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div>
+</div>
+<!-- Row 4: Thu (Lower volume) -->
+<div class="col-span-24 grid grid-cols-24 gap-1 opacity-40">
+<!-- Repeat grid items with low intensity -->
+<div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/20 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/30 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/40 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/50 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/40 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/30 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/20 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/20 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/30 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/20 rounded-sm"></div>
+<div class="heatmap-cell h-8 bg-primary-container/10 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div><div class="heatmap-cell h-8 bg-primary-container/5 rounded-sm"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Goals & Budget Focus (Bento Row 4) -->
+<section class="grid grid-cols-12 gap-grid_gap mt-grid_gap">
+<div class="col-span-4 glass-card p-card_padding border-outline-variant/30">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-primary-container">flight_takeoff</span>
+<h3 class="font-headline-md text-headline-md text-on-surface">Summer Trip</h3>
+</div>
+<p class="font-body-md text-body-md text-secondary mb-4">You're on track to hit your $5,000 goal by June.</p>
+<div class="flex items-end gap-2 mb-2">
+<span class="font-headline-md text-headline-md text-on-surface">$3,850</span>
+<span class="font-label-caps text-label-caps text-secondary opacity-60 mb-1">/ $5,000</span>
+</div>
+<div class="h-2 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary-container rounded-full neon-glow" style="width: 77%"></div>
+</div>
+</div>
+<div class="col-span-8 glass-card p-card_padding flex items-center justify-between overflow-hidden">
+<div class="relative z-10 w-1/2">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Member Contributions</h3>
+<p class="font-body-md text-body-md text-secondary opacity-80 mb-6">Sarah is the highest contributor this month, followed closely by Michael.</p>
+<div class="flex -space-x-4">
+<div class="w-12 h-12 rounded-full border-2 border-primary-container p-0.5 z-30">
+<img alt="Sarah Profile" class="w-full h-full object-cover rounded-full" data-alt="A portrait of a woman with long dark hair, wearing a high-end cream sweater, in a warm but professional interior setting. The lighting is soft and luxurious with hints of neon teal reflections in her eyes, matching the dashboard's primary accent color. High-end lifestyle photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGdYPxf2WmlK5z-runwtXfMWAWJELV9y-_azYiBIOsgtAsikC8j9EPIX5igsdpOhsArRUmwXovfN8HcBPdftrdbpd3fqEJlkcvXahINGbz5wZy7dSbq9zVRRUPCZtYPomiAWrgJfIMkuj8VUYUcV5pF-YO0SWKbYZhr1O7Vaz75fxJYbYeKTb8i_Tt5aGgsjLYbHpesMEwqmJvGyS4j1AVQf59k6ZwqR1gfnS3ruo8BaH6ZQ3RXV_rLZIJlD7iWQLdB3YWclq4vlxK"/>
+</div>
+<div class="w-12 h-12 rounded-full border-2 border-surface-container-highest p-0.5 z-20">
+<img alt="Michael Profile" class="w-full h-full object-cover rounded-full" data-alt="A portrait of a man with short brown hair and a friendly expression, captured in a modern tech-integrated home environment. The scene is illuminated with a professional three-point lighting setup, incorporating subtle cool blue and vibrant cyan tones consistent with a premium finance app UI." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCt61OXDUmz6_y9GcIGRSfvWAsOsGvk342OXyulxUhnNce4bPaKI8OlNPPC_xsYA5UY5Uk33-sLqtOY6nBqOIptEEO28sRS2rmlRHdHeO73K7k6dnm-OPc94UsvwphlIzwJ3RqQYJYwImPs92eSfx_u0oEOk_mzG-k9Cvk_IseH5IcFSd46EMMJeqLElfArPFhntuTOqpYWOfHkM5hxVhup6n1c3GRH_Myz5B_8FHdnGz7kmrXNNTtfKM9hjcH9ToYl3zNd_9fcSnJh"/>
+</div>
+<div class="w-12 h-12 rounded-full border-2 border-surface-container-highest p-0.5 z-10 flex items-center justify-center bg-surface-container-high text-on-surface text-xs font-bold">
+                            +2
+                        </div>
+</div>
+</div>
+<div class="w-1/2 h-full opacity-30 flex items-center justify-center translate-x-12">
+
+</div>
+</div>
+</section>
+</main>
+<!-- Footer Shell -->
+<footer class="w-full py-6 mt-section_margin bg-surface-container-lowest border-t border-outline-variant/10">
+<div class="flex justify-between items-center px-container_padding max-w-7xl mx-auto">
+<div class="flex items-center gap-4">
+<span class="font-bold text-on-surface font-label-caps text-label-caps">© 2024 FamilyVault. All systems operational.</span>
+</div>
+<div class="flex gap-8">
+<a class="font-label-caps text-label-caps text-secondary hover:text-primary-container transition-colors" href="#">Security</a>
+<a class="font-label-caps text-label-caps text-secondary hover:text-primary-container transition-colors" href="#">Privacy Policy</a>
+<a class="font-label-caps text-label-caps text-secondary hover:text-primary-container transition-colors" href="#">API Docs</a>
+</div>
+</div>
+</footer>
+<script>
+        // Micro-interactions for chart highlights
+        document.querySelectorAll('.heatmap-cell').forEach(cell => {
+            cell.addEventListener('mouseenter', function() {
+                const intensity = this.classList.contains('bg-primary-container/100') ? 'High' : 
+                                  this.classList.contains('bg-primary-container/60') ? 'Medium' : 'Low';
+                this.setAttribute('title', `${intensity} activity`);
+            });
+        });
+    </script>
+</body></html>

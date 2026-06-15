@@ -139,14 +139,22 @@ function ChartSection({ title, testId, data }: ChartSectionProps): JSX.Element {
  * Render the spending dashboard with total, category/source/month charts, and
  * loading, empty, and error states.
  *
+ * @param familyId - The active family's id, forwarded to {@link useExpenses}.
+ *   Defaults to `null` until the `FamilyProvider`/routing wiring lands
+ *   (tasks 28.4/31), at which point the active family id is passed in.
  * @param active - Whether a Session is active; forwarded to {@link useExpenses}.
  *   Defaults to `true` (the hook's own default), matching the guarded route
  *   where this screen is only mounted within an active Session.
  *
  * Validates: Requirements 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7
  */
-export function Dashboard({ active = true }: { active?: boolean } = {}): JSX.Element {
-  const { expenses, status, retry } = useExpenses(active);
+export function Dashboard({
+  familyId = null,
+  active = true,
+}: { familyId?: string | null; active?: boolean } = {}): JSX.Element {
+  // SHIM (tasks 28.4/31): `familyId` defaults to `null` so the hook stays idle
+  // until `useFamily` supplies the active family id.
+  const { expenses, status, retry } = useExpenses(familyId, active);
 
   // Aggregations recompute on every render from the current expenses, so the
   // total and charts always reflect the latest snapshot delivered by the live

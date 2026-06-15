@@ -12,9 +12,44 @@ import type {
   Expense,
   ExpenseDocument,
   ExpenseInput,
+  FamilyCategory,
   FamilyMember,
   FirestoreTimestamp,
+  Source,
+  SubSource,
 } from './types';
+import { resolveMemberLabel } from './member';
+
+/**
+ * Display-ready projection of an {@link Expense} for list rendering, with the
+ * stored `categoryId`/`subSourceId` references resolved to human-readable
+ * labels.
+ *
+ * See design "expenseMapper.ts" (`resolveLabels` -> `ExpenseRow`) and
+ * Requirements 6.2, 6.3.
+ */
+export interface ExpenseRow {
+  /** Originating expense id, for keying rows. */
+  id: string;
+  /**
+   * Resolved category display name: the family {@link FamilyCategory} matched
+   * by `categoryId`, falling back to the legacy `category` string when the id
+   * is absent or unresolved (Req 6.2).
+   */
+  categoryName: string;
+  /**
+   * Resolved {@link SubSource} nickname when `subSourceId` is present and
+   * matches a known sub-source; otherwise omitted (Req 6.3).
+   */
+  subSourceNickname?: string;
+  /** Funding method label. */
+  sourceName: Source;
+  amount: number;
+  date: Date;
+  description: string;
+  /** Denormalized recording-member display label (Req 6.2). */
+  recordedByName: string;
+}
 
 const MILLIS_PER_SECOND = 1000;
 const NANOS_PER_MILLI = 1_000_000;
@@ -46,32 +81,49 @@ export function timestampToDate(timestamp: FirestoreTimestamp): Date {
  * @param createdAt - Creation time; defaults to now so callers may inject a
  *   deterministic value (the data layer may instead use a server timestamp).
  *
- * Validates: Requirements 2.3
+ * Carries the family-scoped `categoryId` and the optional `subSourceId`
+ * references and denormalizes the recording member's display label into
+ * `recordedByName`. The legacy `category` string is still written for backward
+ * compatibility with existing data/consumers until later tasks remove it.
+ *
+ * Validates: Requirements 2.3, 3.3, 6.2
  */
 export function toFirestore(
   input: ExpenseInput,
   member: FamilyMember,
   createdAt: Date = new Date(),
 ): ExpenseDocument {
-  return {
+  const doc: ExpenseDocument = {
     amount: input.amount,
     category: input.category,
     source: input.source,
     date: dateToTimestamp(input.date),
     description: input.description,
     recordedBy: member.uid,
+    recordedByName: resolveMemberLabel(member),
     createdAt: dateToTimestamp(createdAt),
   };
+
+  if (input.categoryId !== undefined) {
+    doc.categoryId = input.categoryId;
+  }
+  if (input.subSourceId !== undefined) {
+    doc.subSourceId = input.subSourceId;
+  }
+
+  return doc;
 }
 
 /**
  * Reconstruct a full {@link Expense} from a Firestore document and its id,
- * converting stored timestamps back to {@link Date} values.
+ * converting stored timestamps back to {@link Date} values. Reads the optional
+ * family-scoped `categoryId`/`subSourceId` references and the denormalized
+ * `recordedByName` in addition to the legacy fields.
  *
- * Validates: Requirements 2.3
+ * Validates: Requirements 2.3, 6.2
  */
 export function fromFirestore(id: string, doc: ExpenseDocument): Expense {
-  return {
+  const expense: Expense = {
     id,
     amount: doc.amount,
     category: doc.category as Expense['category'],
@@ -81,4 +133,65 @@ export function fromFirestore(id: string, doc: ExpenseDocument): Expense {
     recordedBy: doc.recordedBy,
     createdAt: timestampToDate(doc.createdAt),
   };
+
+  if (doc.categoryId !== undefined) {
+    expense.categoryId = doc.categoryId;
+  }
+  if (doc.subSourceId !== undefined) {
+    expense.subSourceId = doc.subSourceId;
+  }
+  if (doc.recordedByName !== undefined) {
+    expense.recordedByName = doc.recordedByName;
+  }
+
+  return expense;
+}
+
+/**
+ * Resolve a stored {@link Expense}'s `categoryId`/`subSourceId` references to
+ * display labels, producing a render-ready {@link ExpenseRow}.
+ *
+ * Resolution rules:
+ * - `categoryName`: the family {@link FamilyCategory} whose id matches
+ *   `exp.categoryId`. When `categoryId` is absent or unresolved, falls back to
+ *   the legacy `exp.category` string (Req 6.2).
+ * - `subSourceNickname`: the {@link SubSource} whose id matches
+ *   `exp.subSourceId`. Omitted when `subSourceId` is absent or unresolved
+ *   (Req 6.3).
+ * - `recordedByName`: the denormalized label on the expense, falling back to
+ *   the recording uid when absent (Req 6.2).
+ *
+ * Validates: Requirements 6.2, 6.3
+ */
+export function resolveLabels(
+  exp: Expense,
+  cats: FamilyCategory[],
+  subs: SubSource[],
+): ExpenseRow {
+  const matchedCategory =
+    exp.categoryId !== undefined
+      ? cats.find((category) => category.id === exp.categoryId)
+      : undefined;
+  const categoryName = matchedCategory?.name ?? exp.category;
+
+  const matchedSubSource =
+    exp.subSourceId !== undefined
+      ? subs.find((sub) => sub.id === exp.subSourceId)
+      : undefined;
+
+  const row: ExpenseRow = {
+    id: exp.id,
+    categoryName,
+    sourceName: exp.source,
+    amount: exp.amount,
+    date: exp.date,
+    description: exp.description,
+    recordedByName: exp.recordedByName ?? exp.recordedBy,
+  };
+
+  if (matchedSubSource !== undefined) {
+    row.subSourceNickname = matchedSubSource.nickname;
+  }
+
+  return row;
 }

@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Family ID: Insights</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface": "#e4e2e3",
+                    "primary-fixed": "#63f7ff",
+                    "on-secondary-fixed": "#1a1c1e",
+                    "primary-container": "#00f5ff",
+                    "error-container": "#93000a",
+                    "on-primary-container": "#006c71",
+                    "inverse-surface": "#e4e2e3",
+                    "surface-bright": "#39393a",
+                    "background": "#121314",
+                    "outline-variant": "#3a494a",
+                    "tertiary-fixed-dim": "#e7c427",
+                    "surface": "#121314",
+                    "on-error": "#690005",
+                    "on-tertiary-fixed-variant": "#544600",
+                    "tertiary-container": "#ffdb3f",
+                    "on-primary": "#003739",
+                    "secondary": "#c6c6c9",
+                    "surface-container-highest": "#343536",
+                    "on-error-container": "#ffdad6",
+                    "primary": "#e9feff",
+                    "on-secondary-fixed-variant": "#454749",
+                    "on-surface-variant": "#b9caca",
+                    "surface-container-lowest": "#0d0e0f",
+                    "primary-fixed-dim": "#00dce5",
+                    "on-background": "#e4e2e3",
+                    "surface-dim": "#121314",
+                    "on-secondary-container": "#b4b5b7",
+                    "surface-container-low": "#1b1c1d",
+                    "secondary-fixed-dim": "#c6c6c9",
+                    "on-primary-fixed": "#002021",
+                    "secondary-fixed": "#e2e2e5",
+                    "on-tertiary-container": "#736000",
+                    "tertiary-fixed": "#ffe16c",
+                    "tertiary": "#fff9f0",
+                    "outline": "#849495",
+                    "on-secondary": "#2f3133",
+                    "secondary-container": "#454749",
+                    "inverse-primary": "#00696e",
+                    "error": "#ffb4ab",
+                    "on-primary-fixed-variant": "#004f53",
+                    "surface-container": "#1f2021",
+                    "on-tertiary-fixed": "#221b00",
+                    "surface-tint": "#00dce5",
+                    "surface-variant": "#343536",
+                    "surface-container-high": "#292a2b",
+                    "inverse-on-surface": "#303031",
+                    "on-tertiary": "#3a3000"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "section_margin": "64px",
+                    "grid_gap": "24px",
+                    "container_padding": "24px",
+                    "card_padding": "24px",
+                    "base": "8px"
+            },
+            "fontFamily": {
+                    "headline-md": ["Inter"],
+                    "display-xl": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "label-caps": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "mono-data": ["Inter"]
+            },
+            "fontSize": {
+                    "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "display-xl": ["72px", {"lineHeight": "80px", "letterSpacing": "-0.04em", "fontWeight": "800"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.08em", "fontWeight": "600"}],
+                    "headline-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "mono-data": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "500"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #121314;
+            color: #e4e2e3;
+            -webkit-font-smoothing: antialiased;
+            overscroll-behavior: none;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+        }
+        .cyan-glow {
+            box-shadow: 0 0 15px rgba(0, 245, 255, 0.2);
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-container_padding h-16 bg-surface/30 backdrop-blur-xl border-b border-white/10">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full overflow-hidden border border-primary-container">
+<img alt="Profile" class="w-full h-full object-cover" data-alt="A high-resolution close-up portrait of a professional woman with a calm expression, set against a dark, moody background with subtle cyan lighting highlights. The photography is sharp with a shallow depth of field, emphasizing a premium and modern aesthetic consistent with a high-end financial application's branding." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAzKQC5MUzXholEvnjSMwD_UgeySfCf9HWMtgV9WcGOEIchdFVIarp6T-9gzKGN8_aIaP83Grwo1xNwOvEUDVPwFT41y2LpYbLK7n1E2RpOcRtj2yj8xWM04C1ItUL9yPwX6eQWAAaKMwLZ87HrQ4SIrdDsLCISHTcGsFI7Z0lDsviPsHt0E3NAWNC-2W3WT5qEHaz9IFbDneXRQPVU6zqsiHSG2jIlHfk5WVXFMwtuvjGp2tVvFLgmvYjHlbkrePtJLOBfNz5H8bmu"/>
+</div>
+<h1 class="font-headline-md text-headline-md text-primary-fixed">Family ID: #2904</h1>
+</div>
+<button class="text-primary-container hover:opacity-80 transition-opacity active:scale-95 duration-200">
+<span class="material-symbols-outlined" data-icon="visibility_off">visibility_off</span>
+</button>
+</header>
+<main class="flex-grow pt-20 pb-28 px-container_padding">
+<!-- AI Insight Card -->
+<section class="mb-grid_gap">
+<div class="glass-card p-card_padding border-l-4 border-l-primary-container cyan-glow">
+<div class="flex items-start gap-4">
+<div class="bg-primary-container/10 p-2 rounded-lg">
+<span class="material-symbols-outlined text-primary-container" data-icon="bolt" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</div>
+<div>
+<h2 class="font-label-caps text-label-caps text-primary-container mb-1">AI INSIGHT</h2>
+<p class="font-body-lg text-body-lg text-on-surface">Dining out is up 15% this month compared to your 6-month average.</p>
+<p class="font-body-md text-body-md text-on-surface-variant mt-2">Adjusting this could save you <span class="text-primary-container font-semibold">$240</span> by month-end.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Total Spending Bar Chart -->
+<section class="mb-grid_gap">
+<div class="glass-card p-card_padding">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-headline-md text-headline-md">Total Spending</h3>
+<span class="font-label-caps text-label-caps text-on-surface-variant">LAST 6 MO</span>
+</div>
+<div class="flex items-end justify-between h-48 gap-3 px-2">
+<!-- Bar Chart Implementation -->
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-surface-container-highest rounded-t-lg relative" style="height: 60%;"></div>
+<span class="font-label-caps text-[10px] mt-3 text-on-surface-variant">MAR</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-surface-container-highest rounded-t-lg relative" style="height: 45%;"></div>
+<span class="font-label-caps text-[10px] mt-3 text-on-surface-variant">APR</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-surface-container-highest rounded-t-lg relative" style="height: 75%;"></div>
+<span class="font-label-caps text-[10px] mt-3 text-on-surface-variant">MAY</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-surface-container-highest rounded-t-lg relative" style="height: 55%;"></div>
+<span class="font-label-caps text-[10px] mt-3 text-on-surface-variant">JUN</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<div class="w-full bg-surface-container-highest rounded-t-lg relative" style="height: 85%;"></div>
+<span class="font-label-caps text-[10px] mt-3 text-on-surface-variant">JUL</span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<!-- Active Month -->
+<div class="w-full bg-primary-container rounded-t-lg relative cyan-glow" style="height: 95%;">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 font-mono-data text-primary-container">$4.2k</div>
+</div>
+<span class="font-label-caps text-[10px] mt-3 text-primary-container">AUG</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Category Distribution (Donut Chart) -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-grid_gap">
+<div class="glass-card p-card_padding flex flex-col items-center">
+<div class="w-full flex justify-between items-center mb-6">
+<h3 class="font-headline-md text-headline-md">Categories</h3>
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="filter_list">filter_list</span>
+</div>
+<div class="relative w-48 h-48 flex items-center justify-center mb-6">
+<!-- Semi-Circle / Donut CSS SVG -->
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 36 36">
+<path class="text-surface-container-highest stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3"></path>
+<path class="text-primary-container stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="45, 100" stroke-width="3"></path>
+<path class="text-tertiary-fixed stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="25, 100" stroke-dashoffset="-45" stroke-width="3"></path>
+<path class="text-secondary stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-dasharray="15, 100" stroke-dashoffset="-70" stroke-width="3"></path>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="font-headline-lg text-headline-lg">$8,430</span>
+<span class="font-label-caps text-label-caps text-on-surface-variant">TOTAL</span>
+</div>
+</div>
+<div class="w-full space-y-3">
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary-container"></div>
+<span class="font-body-md text-body-md">Housing</span>
+</div>
+<span class="font-mono-data text-mono-data">45%</span>
+</div>
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-tertiary-fixed"></div>
+<span class="font-body-md text-body-md">Leisure</span>
+</div>
+<span class="font-mono-data text-mono-data">25%</span>
+</div>
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-secondary"></div>
+<span class="font-body-md text-body-md">Groceries</span>
+</div>
+<span class="font-mono-data text-mono-data">15%</span>
+</div>
+</div>
+</div>
+<!-- Spending Trend -->
+<div class="glass-card p-card_padding">
+<h3 class="font-headline-md text-headline-md mb-6">Weekly Flux</h3>
+<div class="relative h-40 w-full">
+<!-- Minimalist Area Chart Pattern -->
+<svg class="w-full h-full overflow-visible" preserveaspectratio="none" viewbox="0 0 100 100">
+<defs>
+<lineargradient id="cyanGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#00f5ff" stop-opacity="0.4"></stop>
+<stop offset="100%" stop-color="#00f5ff" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0 80 Q 25 20, 50 50 T 100 30 L 100 100 L 0 100 Z" fill="url(#cyanGradient)"></path>
+<path d="M0 80 Q 25 20, 50 50 T 100 30" fill="none" stroke="#00f5ff" stroke-width="2"></path>
+<circle class="cyan-glow" cx="50" cy="50" fill="#00f5ff" r="3"></circle>
+</svg>
+</div>
+<div class="mt-6 flex items-center justify-between">
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant">CURRENT WEEK</p>
+<p class="font-headline-md text-headline-md text-primary-fixed">$1,240.00</p>
+</div>
+<div class="flex items-center text-primary-container gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span>
+<span class="font-mono-data text-mono-data">2.4%</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-20 pb-safe px-4 bg-surface/30 backdrop-blur-xl border-t border-white/10 rounded-t-xl">
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="grid_view">grid_view</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="receipt_long">receipt_long</span>
+<span class="font-label-caps text-label-caps">Activity</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary-container drop-shadow-[0_0_8px_rgba(0,245,255,0.4)] active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="insert_chart" style="font-variation-settings: 'FILL' 1;">insert_chart</span>
+<span class="font-label-caps text-label-caps">Insights</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="savings">savings</span>
+<span class="font-label-caps text-label-caps">Vault</span>
+</a>
+</nav>
+<script>
+        // Micro-interactions and atmospheric hover effects
+        document.querySelectorAll('.glass-card').forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                card.style.setProperty('--mouse-x', `${x}px`);
+                card.style.setProperty('--mouse-y', `${y}px`);
+            });
+        });
+
+        // Simple animation for bars on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const bars = document.querySelectorAll('.rounded-t-lg');
+            bars.forEach((bar, index) => {
+                const targetHeight = bar.style.height;
+                bar.style.height = '0%';
+                setTimeout(() => {
+                    bar.style.transition = 'height 1s cubic-bezier(0.2, 0.8, 0.2, 1)';
+                    bar.style.height = targetHeight;
+                }, 100 + (index * 100));
+            });
+        });
+    </script>
+</body></html>

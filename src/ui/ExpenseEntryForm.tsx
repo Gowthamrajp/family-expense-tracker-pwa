@@ -173,8 +173,15 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 
 /**
  * Render the expense entry form.
+ *
+ * @param familyId - The active family's id, used to scope the write via
+ *   {@link expenseRepository.addExpense}. Defaults to `null` until the
+ *   `FamilyProvider`/routing wiring lands (tasks 28.4/31); while `null`, a
+ *   submit is treated as a save error so no unscoped write is attempted.
  */
-export function ExpenseEntryForm(): JSX.Element {
+export function ExpenseEntryForm({
+  familyId = null,
+}: { familyId?: string | null } = {}): JSX.Element {
   const { member } = useAuth();
 
   const [form, setForm] = useState<ExpenseFormInput>(EMPTY_FORM);
@@ -209,9 +216,10 @@ export function ExpenseEntryForm(): JSX.Element {
 
       setFieldErrors({});
 
-      if (member === null) {
-        // No active Session to attribute the expense to: treat as a save error
-        // and retain the entered values.
+      if (member === null || familyId === null) {
+        // No active Session/resolved family to attribute the expense to: treat
+        // as a save error and retain the entered values. The `familyId === null`
+        // guard is a SHIM (tasks 28.4/31) until `useFamily` supplies the id.
         setSaveState({ kind: 'error' });
         return;
       }
@@ -222,7 +230,7 @@ export function ExpenseEntryForm(): JSX.Element {
 
       try {
         await withTimeout(
-          expenseRepository.addExpense(result.value, member),
+          expenseRepository.addExpense(familyId, result.value, member),
           SAVE_TIMEOUT_MS,
         );
         if (saveAttemptRef.current !== attemptId) {
@@ -239,7 +247,7 @@ export function ExpenseEntryForm(): JSX.Element {
         setSaveState({ kind: 'error' });
       }
     },
-    [form, member],
+    [form, member, familyId],
   );
 
   const descriptionLength = useMemo(

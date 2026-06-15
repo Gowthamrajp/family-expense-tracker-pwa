@@ -1,17 +1,79 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /expenses/{expenseId} {
-      // Req 6.1: only authenticated family members may read expenses.
-      allow read: if request.auth != null;
 
-      // Req 6.2: only authenticated family members may create expenses, and a
-      // created document must attribute itself to the authenticated caller.
-      allow create: if request.auth != null
-                    && request.resource.data.recordedBy == request.auth.uid;
+    // The caller's family is read from their routing document at
+    // users/{uid}.familyId.
+    function callerFamily() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId;
+    }
+    // Access to family-scoped data is gated on the caller being a member of the
+    // family that owns the data (Req 9.1, 9.2, 9.3).
+    function isMember(familyId) {
+      return request.auth != null && callerFamily() == familyId;
+    }
 
-      // Editing/deleting expenses is out of scope for the MVP.
+    // Routing doc: a user may read/write only their own routing document.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Invite-code index: any authenticated user may look up a code they know
+    // (get-by-id only — no listing), revealing only the target familyId.
+    match /inviteCodes/{code} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow create: if request.auth != null;   // written at family creation
       allow update, delete: if false;
+    }
+
+    // Family document: members may read; creation must include the creator.
+    match /families/{familyId} {
+      allow read: if isMember(familyId);
+      allow create: if request.auth != null
+                    && request.auth.uid in request.resource.data.memberUids;
+      // Joining appends the caller to memberUids (membership growth only).
+      allow update: if request.auth != null
+                    && request.auth.uid in request.resource.data.memberUids;
+      allow delete: if false;
+
+      // All family-scoped data: members of THIS family only (Req 9.1, 9.2, 9.3).
+      match /expenses/{expenseId} {
+        allow read: if isMember(familyId);
+        allow create: if isMember(familyId)
+                      && request.resource.data.recordedBy == request.auth.uid;
+        allow update, delete: if false;        // editing/deleting out of scope
+      }
+      match /categories/{categoryId} {
+        allow read: if isMember(familyId);
+        allow create: if isMember(familyId);
+        allow update, delete: if false;        // only adding is in scope
+      }
+      match /subSources/{subSourceId} {
+        allow read: if isMember(familyId);
+        // No-full-card-number guarantee (Req 9.5, 5.6): reject any payload with
+        // extra fields; only source, nickname, and an optional 4-digit last4
+        // are allowed.
+        allow create: if isMember(familyId)
+                      && request.resource.data.keys().hasOnly(['source','nickname','last4'])
+                      && request.resource.data.nickname is string
+                      && (!('last4' in request.resource.data)
+                          || request.resource.data.last4.matches('^[0-9]{4}$'));
+        allow update, delete: if false;        // only adding is in scope
+      }
+    }
+
+    // TRANSITIONAL (legacy MVP data): the MVP stored expenses in a single
+    // top-level `expenses` collection. The one-time client-side migration
+    // (runs when the first family is created) needs to read these legacy docs
+    // so they can be copied into the family's subcollection. We allow only the
+    // original recorder to READ their legacy docs; no new writes are permitted
+    // here (all new expense writes go through families/{familyId}/expenses).
+    // This rule should be removed once migration is complete for all users.
+    match /expenses/{expenseId} {
+      allow read: if request.auth != null
+                  && resource.data.recordedBy == request.auth.uid;
+      allow create, update, delete: if false;
     }
   }
 }
