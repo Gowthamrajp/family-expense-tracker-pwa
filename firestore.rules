@@ -32,9 +32,32 @@ service cloud.firestore {
       allow read: if isMember(familyId);
       allow create: if request.auth != null
                     && request.auth.uid in request.resource.data.memberUids;
-      // Joining appends the caller to memberUids (membership growth only).
-      allow update: if request.auth != null
-                    && request.auth.uid in request.resource.data.memberUids;
+      // Membership/ownership updates authorize exactly three transitions:
+      //  (a) Self-join: a caller not previously in memberUids adds themselves
+      //      (invite-code join), leaving ownerUid and inviteCode unchanged.
+      //  (b) Owner membership management: the family's owner updates membership
+      //      (e.g. removing a member — Req 12.3, 12.4).
+      //  (c) One-time ownerUid backfill: when no owner is recorded, the
+      //      original creator (memberUids[0]) sets ownerUid to themselves
+      //      (Req 12.2).
+      allow update: if request.auth != null && (
+                      // (a) self-join
+                      (
+                        !(request.auth.uid in resource.data.memberUids)
+                        && request.auth.uid in request.resource.data.memberUids
+                        && request.resource.data.inviteCode == resource.data.inviteCode
+                        && request.resource.data.get('ownerUid', '') == resource.data.get('ownerUid', '')
+                      )
+                      // (b) owner manages membership
+                      || request.auth.uid == resource.data.get('ownerUid', '')
+                      // (c) one-time owner backfill by the original creator
+                      || (
+                        resource.data.get('ownerUid', '') == ''
+                        && resource.data.memberUids.size() > 0
+                        && resource.data.memberUids[0] == request.auth.uid
+                        && request.resource.data.ownerUid == request.auth.uid
+                      )
+                    );
       allow delete: if false;
 
       // All family-scoped data: members of THIS family only (Req 9.1, 9.2, 9.3).

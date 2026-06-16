@@ -487,7 +487,7 @@ deploying and verifying it.
     - Test that a blocked category/sub-source delete shows "In use by N expense(s)" and the item remains (4.9, 5.10), and that member rows show the resolved profile label with name → email → identifier fallback (2.9)
     - _Requirements: 4.9, 5.10, 2.9_
 
-- [-] 42. Final checkpoint - build, test, deploy, and verify round-2
+- [x] 42. Final checkpoint - build, test, deploy, and verify round-2
   - Run build, typecheck, and the full test suite; deploy the revised Firestore rules (`firebase deploy --only firestore:rules`) and Hosting (`firebase deploy --only hosting`); verify the member list shows readable names, that editing an expense preserves the original recorder and creation time while stamping `updatedBy`/`updatedAt`, that deleting an in-use category/sub-source is blocked with the "In use by N expense(s)" count while an unreferenced one deletes, that any member can edit/delete any expense in their family, and that cross-family isolation is preserved.
   - _Requirements: 2.9, 3.15, 4.9, 5.10, 9.4, 9.5, 9.6, 9.7, 11.2_
 
@@ -504,6 +504,62 @@ deploying and verifying it.
     { "id": 5, "tasks": ["40.2", "41.4"] },
     { "id": 6, "tasks": ["40.3"] },
     { "id": 7, "tasks": ["42"] }
+  ]
+}
+```
+
+
+## Expansion Plan: Family Ownership and Member Management
+
+This section appends to the completed plans above (tasks 1–42) to implement the
+third expansion round defined in the updated requirements and design: a family
+owner recorded at creation and backfilled for legacy families (Req 12.1, 12.2),
+owner-gated member removal (Req 12.3, 12.4, 12.5), removed-member access loss
+with graceful routing (Req 12.6), and hiding the remove control from non-owners
+(Req 12.7). The optional `*` test sub-task covers design Property 16.
+
+- [ ] 43. Add `ownerUid` to the family domain model
+  - Update `src/domain/types.ts`: add `ownerUid: string` to both `Family` and `FamilyDocument`.
+  - _Requirements: 12.1_
+
+- [ ] 44. Add ownership and member-removal to the data layer
+  - [ ] 44.1 Set `ownerUid` on family creation in `src/data/familyRepository.ts`
+    - In `createFamily`, write `ownerUid: creator.uid` inside the create transaction alongside the existing family fields; include `ownerUid` in `toFamily` mapping and the fallback family object.
+    - _Requirements: 12.1_
+  - [ ] 44.2 Add `removeMember` and `claimOwnershipIfUnset`, and make `getFamilyForMember` resilient
+    - Add `removeMember(familyId, targetUid)` using `arrayRemove` on `memberUids`; refuse to remove the family's owner. Add `claimOwnershipIfUnset(familyId, uid)` that writes `ownerUid = uid` only when `ownerUid` is unset and `memberUids[0] === uid`. Make `getFamilyForMember` resolve a `permission-denied` family read to `null` (treated as no-family) instead of throwing. Add both methods to the `FamilyRepository` interface.
+    - _Requirements: 12.2, 12.3, 12.5, 12.6_
+  - [ ]* 44.3 Write a property test for member removal
+    - **Property 16: removeMember removes exactly the target and never the owner**
+    - **Validates: Requirements 12.3, 12.5**
+    - Arbitrary memberUids sets, owner, and target uid; assert the result equals the prior set minus the target, is a no-op when the target is absent, and never removes the owner; min 100 iterations; tag with the design property comment.
+
+- [ ] 45. Refine Firestore security rules for ownership
+  - Update `firestore.rules`: replace the `families/{familyId}` update rule with one authorizing exactly (a) a self-join transition with `ownerUid`/`inviteCode` unchanged, (b) the owner (`request.auth.uid == resource.data.ownerUid`) updating membership, and (c) a one-time `ownerUid` backfill when `ownerUid` is unset and the caller is `memberUids[0]`. Keep create and all subcollection rules unchanged.
+  - _Requirements: 12.2, 12.3, 12.4, 12.6_
+
+- [ ] 46. Expose ownership and removal in the state layer
+  - In `src/state/FamilyProvider.tsx`, extend `UseFamilyResult` with `ownerUid`, a derived `isOwner`, and a `removeMember(uid)` action delegating to the repository (refreshing the member list after). Best-effort call `claimOwnershipIfUnset(family.id, member.uid)` on family resolution (non-blocking, like the member-profile upsert).
+  - _Requirements: 12.1, 12.2, 12.3, 12.7_
+
+- [ ] 47. Add owner label and owner-gated remove control to the member list
+  - In `src/ui/FamilySettings.tsx` `FamilySection`, show an "Owner" label on the owner's row; render a `person_remove` control with an inline confirmation on each NON-owner row only when `isOwner` is true; confirm calls `removeMember(uid)`. Render no remove control when the current member is not the owner, and never on the owner's own row. Keep the dark FamilyVault styling.
+  - _Requirements: 12.3, 12.5, 12.7_
+
+- [ ] 48. Final checkpoint - build, test, deploy, and verify round-3
+  - Run build, typecheck, and the test suite; deploy the revised Firestore rules (`firebase deploy --only firestore:rules`) and Hosting (`firebase deploy --only hosting`); verify the creator is shown as Owner, the owner can remove a non-owner member (who then loses access and is routed to create/join), the owner cannot remove themselves, and a non-owner sees no remove control.
+  - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7_
+
+## Round-3 Expansion Task Dependency Graph
+
+```json
+{
+  "waves": [
+    { "id": 0, "tasks": ["43"] },
+    { "id": 1, "tasks": ["44.1", "44.2"] },
+    { "id": 2, "tasks": ["44.3", "45", "46"] },
+    { "id": 3, "tasks": ["47"] },
+    { "id": 4, "tasks": ["48"] }
   ]
 }
 ```

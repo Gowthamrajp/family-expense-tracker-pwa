@@ -58,7 +58,7 @@ const FIELD_CLASS = 'flex flex-col gap-1.5 text-left text-sm text-on-surface-var
  * sections.
  */
 export function FamilySettings(): JSX.Element {
-  const { family, members, status } = useFamily();
+  const { family, members, status, ownerUid, isOwner, removeMember } = useFamily();
   // Pass the resolved family id (or null) into the data hooks; they stay idle
   // until a family is resolved.
   const familyId = family?.id ?? null;
@@ -94,7 +94,13 @@ export function FamilySettings(): JSX.Element {
   return (
     <main className="p-5 md:px-container_padding md:py-8 max-w-3xl mx-auto flex flex-col gap-grid_gap">
       <h1 className="text-headline-lg font-bold text-on-surface">Family settings</h1>
-      <FamilySection inviteCode={family.inviteCode} members={members} />
+      <FamilySection
+        inviteCode={family.inviteCode}
+        members={members}
+        ownerUid={ownerUid}
+        isOwner={isOwner}
+        onRemoveMember={removeMember}
+      />
       <CategoryManager familyId={familyId} />
       <SubSourceManager familyId={familyId} />
     </main>
@@ -105,14 +111,49 @@ export function FamilySettings(): JSX.Element {
 interface FamilySectionProps {
   inviteCode: string;
   members: FamilyMember[];
+  /** Uid of the family's owner, or null when unknown (Req 12.1). */
+  ownerUid: string | null;
+  /** Whether the current member is the owner (gates the remove control). */
+  isOwner: boolean;
+  /** Remove a member from the family (owner-only, Req 12.3). */
+  onRemoveMember: (uid: string) => Promise<void>;
 }
 
 /**
  * Family identity section: the shareable invite code (with copy-to-clipboard)
- * and the member list (Req 2.6).
+ * and the member list (Req 2.6). The owner's row is labeled "Owner"; when the
+ * current member is the owner, each other member row gets a remove control
+ * with an inline confirmation (Req 12.3, 12.5, 12.7).
  */
-function FamilySection({ inviteCode, members }: FamilySectionProps): JSX.Element {
+function FamilySection({
+  inviteCode,
+  members,
+  ownerUid,
+  isOwner,
+  onRemoveMember,
+}: FamilySectionProps): JSX.Element {
   const [copied, setCopied] = useState(false);
+  // Uid of the member awaiting remove confirmation (inline confirm state).
+  const [confirmingUid, setConfirmingUid] = useState<string | null>(null);
+  // Uid of the member whose removal is in flight.
+  const [removingUid, setRemovingUid] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  const handleRemove = async (uid: string) => {
+    if (removingUid !== null) {
+      return;
+    }
+    setConfirmingUid(null);
+    setRemovingUid(uid);
+    setRemoveError(null);
+    try {
+      await onRemoveMember(uid);
+    } catch {
+      setRemoveError('Could not remove that member. Please try again.');
+    } finally {
+      setRemovingUid(null);
+    }
+  };
 
   const handleCopy = async () => {
     setCopied(false);
@@ -183,6 +224,12 @@ function FamilySection({ inviteCode, members }: FamilySectionProps): JSX.Element
               const display = hasIdentity
                 ? resolveMemberLabel(member)
                 : member.uid;
+              const isMemberOwner = ownerUid !== null && member.uid === ownerUid;
+              // The remove control is shown only to the owner, and never on the
+              // owner's own row (Req 12.5, 12.7).
+              const canRemove = isOwner && !isMemberOwner;
+              const isConfirming = confirmingUid === member.uid;
+              const isRemoving = removingUid === member.uid;
               return (
                 <li
                   key={member.uid}
@@ -191,11 +238,55 @@ function FamilySection({ inviteCode, members }: FamilySectionProps): JSX.Element
                   <span className="material-symbols-outlined text-primary-container text-lg" aria-hidden="true">
                     account_circle
                   </span>
-                  <span className="text-on-surface text-sm truncate">{display}</span>
+                  <span className="text-on-surface text-sm truncate flex-1">{display}</span>
+                  {isMemberOwner && (
+                    <span className="text-xs uppercase tracking-wide text-primary-container px-2 py-0.5 rounded-full bg-primary-container/10 border border-primary-container/30">
+                      Owner
+                    </span>
+                  )}
+                  {canRemove &&
+                    (isConfirming ? (
+                      <span className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleRemove(member.uid)}
+                          disabled={isRemoving}
+                          aria-busy={isRemoving}
+                          className="btn-ghost px-2.5 py-1 text-xs text-error"
+                        >
+                          {isRemoving ? 'Removing…' : 'Remove'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingUid(null)}
+                          disabled={isRemoving}
+                          className="btn-ghost px-2.5 py-1 text-xs"
+                        >
+                          Cancel
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingUid(member.uid)}
+                        disabled={removingUid !== null}
+                        aria-label={`Remove member ${display}`}
+                        className="btn-ghost p-1.5 text-on-surface-variant hover:text-error"
+                      >
+                        <span className="material-symbols-outlined text-lg" aria-hidden="true">
+                          person_remove
+                        </span>
+                      </button>
+                    ))}
                 </li>
               );
             })}
           </ul>
+        )}
+        {removeError && (
+          <p role="alert" className="text-error text-sm mt-1">
+            {removeError}
+          </p>
         )}
       </div>
     </section>

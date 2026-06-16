@@ -92,6 +92,12 @@ export interface Family {
   createdAt: Date;
   /** Uids of the members of this family (Req 2.5). */
   memberUids: string[];
+  /**
+   * Uid of the family's owner — the member who created it (Req 12.1). May be
+   * an empty string for legacy families created before ownership existed,
+   * until backfilled (Req 12.2).
+   */
+  ownerUid: string;
 }
 
 /**
@@ -264,6 +270,11 @@ export interface FamilyDocument {
   inviteCode: string;
   createdAt: FirestoreTimestamp;
   memberUids: string[];
+  /**
+   * Uid of the family's owner (Req 12.1). Absent on legacy family documents
+   * created before ownership existed, until backfilled (Req 12.2).
+   */
+  ownerUid?: string;
 }
 
 /** Document shape stored at `families/{familyId}/categories/{categoryId}`. */

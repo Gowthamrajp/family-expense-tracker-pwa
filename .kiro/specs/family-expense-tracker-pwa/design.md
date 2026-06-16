@@ -1052,3 +1052,118 @@ These are the primary verification for Requirement 9's cross-family isolation an
 - `firebase.json` / `.firebaserc` present with Hosting config (11.1); build produces a static `dist` (11.2).
 - README contains ordered configure/run/deploy sections (11.4).
 - `.gitignore` excludes Firebase credential and secret files; no secrets tracked (11.6).
+
+
+## Round-3 Expansion: Family Ownership and Member Management
+
+This round adds a lightweight ownership model and owner-gated member removal on
+top of the existing family-scoped structure (Req 12). It introduces no new
+runtime dependencies and keeps the four-layer architecture, the dark FamilyVault
+UI, and the Firebase stack unchanged. Adding members continues to use the
+existing invite-code join flow (the owner shares the code); this round adds only
+the ability to record an owner and remove members.
+
+### Data model
+
+- `Family` and `FamilyDocument` gain `ownerUid: string` — the uid of the member
+  who created the family (Req 12.1).
+- New families set `ownerUid = creator.uid` inside the `createFamily`
+  transaction, alongside the existing `name`/`inviteCode`/`createdAt`/
+  `memberUids` writes.
+- Existing families created before this round have no `ownerUid`. They are
+  backfilled (Req 12.2): the original creator is, by construction, the first uid
+  in `memberUids` (createFamily seeds `memberUids: [creator.uid]` and joins only
+  append). On family resolution, if `ownerUid` is absent and the caller is
+  `memberUids[0]`, the client writes `ownerUid = caller.uid` once.
+
+### Data layer (`familyRepository.ts`)
+
+```typescript
+interface FamilyRepository {
+  // ...existing members...
+
+  // Remove another member from the family. Owner-gated at the rules layer
+  // (Req 12.3, 12.4); the caller must be the family's ownerUid. Uses
+  // arrayRemove on memberUids. The repository refuses to remove the owner
+  // themselves (Req 12.5).
+  removeMember(familyId: string, targetUid: string): Promise<void>; // Req 12.3, 12.5
+
+  // One-time ownerUid backfill for legacy families (Req 12.2). Writes ownerUid
+  // only when it is currently unset and the caller is memberUids[0]; otherwise
+  // a no-op. Best-effort and non-blocking, like upsertMemberProfile.
+  claimOwnershipIfUnset(familyId: string, uid: string): Promise<void>; // Req 12.2
+}
+```
+
+- `removeMember(familyId, targetUid)` calls `updateDoc(familyRef, { memberUids:
+  arrayRemove(targetUid) })`. It guards against removing the owner client-side
+  (the rules also forbid it implicitly because the owner would still need to
+  remain). It does NOT clear the removed member's `users/{targetUid}.familyId`
+  routing doc: the `users/{uid}` rule is self-only, so the owner cannot write
+  another member's routing doc. This is intentional and handled by the resilient
+  read below — the stale routing doc points at a family the removed member can
+  no longer read, which resolves to "no family".
+- `claimOwnershipIfUnset(familyId, uid)` reads the family; if `ownerUid` is
+  absent/empty and `memberUids[0] === uid`, it `updateDoc`s `{ ownerUid: uid }`.
+- `getFamilyForMember` becomes **resilient** (Req 12.6): a `permission-denied`
+  error on the family read (the caller was removed and is no longer a member)
+  resolves to `null` (treated as no-family) instead of throwing, so a removed
+  member is routed to the create-or-join screen rather than an error screen.
+
+### State layer (`FamilyProvider` / `useFamily`)
+
+`UseFamilyResult` gains:
+
+```typescript
+interface UseFamilyResult {
+  // ...existing...
+  ownerUid: string | null;     // the resolved family's owner (Req 12.1)
+  isOwner: boolean;            // ownerUid === current member uid (Req 12.3, 12.7)
+  removeMember(uid: string): Promise<void>; // owner-only action (Req 12.3)
+}
+```
+
+On successful family resolution the provider best-effort calls
+`claimOwnershipIfUnset(family.id, member.uid)` (non-blocking, like the
+member-profile upsert) so the legacy owner is backfilled, then re-reads/refreshes
+members. `removeMember(uid)` delegates to the repository and relies on the
+member-list refresh (re-`listMembers`) to reflect the removal; it is only invoked
+from the owner-gated UI control.
+
+### UI layer (`FamilySettings`)
+
+The member list (in `FamilySection`) is revised:
+
+- The owner's row shows an "Owner" label/badge.
+- For every NON-owner member row, when `isOwner` is true, a remove control
+  (`person_remove` Material Symbol) is shown with an inline confirmation prompt
+  (matching the category/sub-source delete pattern). Confirm calls
+  `removeMember(uid)` (Req 12.3); the live member-list refresh removes the row.
+- When the current member is not the owner, no remove control is rendered on any
+  row (Req 12.7), and the owner cannot remove their own row (Req 12.5).
+
+### Security rules (`firestore.rules`)
+
+The `families/{familyId}` `update` rule is refined to authorize exactly these
+transitions (replacing the prior "grows memberUids" rule):
+
+- **Self-join** (unchanged behavior): an authenticated caller who was not in
+  `resource.data.memberUids` and is in `request.resource.data.memberUids`, with
+  `ownerUid` and `inviteCode` unchanged. This preserves invite-code joining.
+- **Owner membership management**: `request.auth.uid == resource.data.ownerUid`
+  — the owner may update `memberUids` (the only field membership management
+  touches), enabling member removal (Req 12.3, 12.4).
+- **One-time ownerUid backfill**: when `resource.data.ownerUid` is unset (the
+  field is missing) and the caller is `resource.data.memberUids[0]`, the caller
+  may set `ownerUid` to themselves (Req 12.2).
+
+Cross-family isolation, the family-create rule, and all subcollection rules are
+unchanged. The removed member's loss of access falls out of the existing
+member-gated read/write rules once their uid is removed from `memberUids`
+(Req 12.6).
+
+### Correctness Properties (Round 3)
+
+- **Property 16 (optional test):** For any family with a recorded owner and any
+  target uid, `removeMember` reduces `memberUids` to exactly the prior set minus
+  the target (and is a no-op for a uid not present), and never removes the owner.

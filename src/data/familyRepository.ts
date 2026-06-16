@@ -16,6 +16,7 @@
  *   inviteCodes/{code}                            -> { familyId }
  */
 import {
+  arrayRemove,
   arrayUnion,
   collection,
   doc,
@@ -25,6 +26,7 @@ import {
   serverTimestamp,
   setDoc,
   Timestamp,
+  updateDoc,
   writeBatch,
   type DocumentData,
   type QueryDocumentSnapshot,
@@ -168,6 +170,28 @@ export interface FamilyRepository {
    * Validates: Requirements 2.7, 2.8
    */
   upsertMemberProfile(familyId: string, member: FamilyMember): Promise<void>;
+
+  /**
+   * Remove another member from the family. Owner-gated by the security rules
+   * (only the family's `ownerUid` may update membership — Req 12.3, 12.4). The
+   * repository additionally refuses to remove the owner themselves (Req 12.5).
+   * Uses `arrayRemove` on `memberUids`. The removed member's `users/{uid}`
+   * routing doc is intentionally NOT cleared (it is self-only); the resilient
+   * `getFamilyForMember` handles their now-denied access (Req 12.6).
+   *
+   * Validates: Requirements 12.3, 12.5
+   */
+  removeMember(familyId: string, targetUid: string): Promise<void>;
+
+  /**
+   * One-time owner backfill for legacy families (Req 12.2). Writes
+   * `ownerUid = uid` only when the family currently has no owner and the caller
+   * is the original creator (the first uid in `memberUids`); otherwise a no-op.
+   * Best-effort and non-blocking, like {@link upsertMemberProfile}.
+   *
+   * Validates: Requirements 12.2
+   */
+  claimOwnershipIfUnset(familyId: string, uid: string): Promise<void>;
 }
 
 /** Adapt an SDK `Timestamp` (or null) to a `Date`, defaulting to now. */
@@ -192,12 +216,16 @@ function toStructuralTimestamp(
 
 /** Build a {@link Family} from a family document id and its stored data. */
 function toFamily(id: string, data: FamilyDocument | DocumentData): Family {
+  const memberUids = (data.memberUids ?? []) as string[];
   return {
     id,
     name: (data.name ?? null) as string | null,
     inviteCode: data.inviteCode as string,
     createdAt: timestampToDate(data.createdAt),
-    memberUids: (data.memberUids ?? []) as string[],
+    memberUids,
+    // Legacy families have no ownerUid yet; default to '' so the type stays a
+    // string. It is backfilled to memberUids[0] on resolution (Req 12.2).
+    ownerUid: (data.ownerUid ?? '') as string,
   };
 }
 
@@ -385,6 +413,8 @@ export const familyRepository: FamilyRepository = {
             inviteCode: candidate,
             createdAt: serverTimestamp(),
             memberUids: [creator.uid],
+            // The creator is the family's owner (Req 12.1).
+            ownerUid: creator.uid,
           });
           tx.set(inviteCodeRef, { familyId: familyRef.id });
           tx.set(userRef, { familyId: familyRef.id });
@@ -450,6 +480,7 @@ export const familyRepository: FamilyRepository = {
             inviteCode,
             createdAt: new Date(),
             memberUids: [creator.uid],
+            ownerUid: creator.uid,
           };
     return { family, migrationFailures };
   },
@@ -519,11 +550,23 @@ export const familyRepository: FamilyRepository = {
     }
 
     const familyRef = doc(firestore, FAMILIES_COLLECTION, familyId);
-    const familySnap = await getDoc(familyRef);
-    if (!familySnap.exists()) {
-      return null;
+    try {
+      const familySnap = await getDoc(familyRef);
+      if (!familySnap.exists()) {
+        return null;
+      }
+      return toFamily(familyId, familySnap.data());
+    } catch (error) {
+      // A removed member's routing doc still points at the family, but the
+      // member-gated read rule now denies them. Treat permission-denied as
+      // "no family" so they are routed to the create/join screen rather than an
+      // error screen (Req 12.6).
+      const code = (error as { code?: string } | null)?.code;
+      if (code === 'permission-denied') {
+        return null;
+      }
+      throw error;
     }
-    return toFamily(familyId, familySnap.data());
   },
 
   async listMembers(familyId: string): Promise<FamilyMember[]> {
@@ -584,5 +627,39 @@ export const familyRepository: FamilyRepository = {
       profile.joinedAt = serverTimestamp();
     }
     await setDoc(memberRef, profile, { merge: true });
+  },
+
+  async removeMember(familyId: string, targetUid: string): Promise<void> {
+    const familyRef = doc(firestore, FAMILIES_COLLECTION, familyId);
+
+    // Guard: never remove the family's owner (Req 12.5). Read the family to
+    // learn the owner; the caller is the owner (the only one the rules let
+    // update membership), so this read is permitted.
+    const familySnap = await getDoc(familyRef);
+    if (!familySnap.exists()) {
+      return;
+    }
+    const ownerUid = (familySnap.data().ownerUid ?? '') as string;
+    if (targetUid === ownerUid) {
+      throw new Error('The family owner cannot be removed.');
+    }
+
+    await updateDoc(familyRef, { memberUids: arrayRemove(targetUid) });
+  },
+
+  async claimOwnershipIfUnset(familyId: string, uid: string): Promise<void> {
+    const familyRef = doc(firestore, FAMILIES_COLLECTION, familyId);
+    const familySnap = await getDoc(familyRef);
+    if (!familySnap.exists()) {
+      return;
+    }
+    const data = familySnap.data();
+    const ownerUid = (data.ownerUid ?? '') as string;
+    const memberUids = (data.memberUids ?? []) as string[];
+    // Only the original creator (memberUids[0]) backfills, and only when no
+    // owner is recorded yet (Req 12.2).
+    if (ownerUid === '' && memberUids.length > 0 && memberUids[0] === uid) {
+      await updateDoc(familyRef, { ownerUid: uid });
+    }
   },
 };

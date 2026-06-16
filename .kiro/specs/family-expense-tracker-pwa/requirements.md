@@ -205,11 +205,25 @@ The product was first delivered as a minimal viable product (MVP) covering authe
 5. THE Expense_Tracker source SHALL be maintained in a GitHub repository.
 6. THE Expense_Tracker SHALL exclude all Firebase credentials and environment secret files from version control by listing them in the repository ignore configuration so that no credential or secret file is committed.
 
+### Requirement 12: Family Ownership and Member Management
+
+**User Story:** As the family member who created the family, I want to be its owner and be able to remove members, so that I control who has access to our shared expense data.
+
+#### Acceptance Criteria
+
+1. WHEN a Family_Member creates a Family, THE Expense_Tracker SHALL record that creating Family_Member as the owner of that Family.
+2. WHILE a Family has no recorded owner, THE Expense_Tracker SHALL designate the Family's original creator (the first member in the Family's member list) as its owner the next time that original creator resolves the Family.
+3. WHERE the requesting Family_Member is the owner of a Family, THE Expense_Tracker SHALL permit that Family_Member to remove any other member from the Family, removing the removed member from the Family's member list.
+4. IF a request to remove a member does not originate from the owner of that Family, THEN THE Data_Store SHALL reject the request, SHALL NOT modify the member list, and SHALL respond indicating that access is denied.
+5. THE Expense_Tracker SHALL NOT permit the owner to remove themselves from the Family.
+6. WHEN a Family_Member is removed from a Family, THE Data_Store SHALL deny that removed Family_Member further read and write access to that Family's data, and THE PWA_Client SHALL, on that member's next Family resolution, treat them as belonging to no Family and route them to the create-or-join screen without surfacing an error.
+7. WHERE the requesting Family_Member is not the owner of a Family, THE PWA_Client SHALL NOT present a remove-member control for that Family.
+
 ## Out of Scope for MVP
 
 The following capabilities are intentionally excluded and are candidates for future iterations:
 
-- Removing members from a Family, assigning roles to members, or regenerating or revoking an Invite_Code.
+- Assigning additional roles to members beyond owner, transferring ownership, or regenerating or revoking an Invite_Code.
 - Belonging to more than one Family at a time, or switching between Families.
 - Filtering, searching, or date-range selection on the expense list or dashboard.
 - Budgets, spending limits, and alerts.

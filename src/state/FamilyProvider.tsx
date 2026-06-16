@@ -63,6 +63,10 @@ export interface UseFamilyResult {
   members: FamilyMember[];
   /** Derived membership status. */
   status: FamilyStatus;
+  /** Uid of the resolved family's owner, or null when no family/owner (Req 12.1). */
+  ownerUid: string | null;
+  /** True when the current member is the resolved family's owner (Req 12.3, 12.7). */
+  isOwner: boolean;
   /**
    * Legacy expenses that could not be migrated when this member created the
    * first family (Req 10.5). Empty unless a just-completed `createFamily`
@@ -88,6 +92,12 @@ export interface UseFamilyResult {
    *   throws when no member is signed in.
    */
   joinFamily: (inviteCode: string) => Promise<void>;
+  /**
+   * Remove another member from the resolved family. Owner-only (Req 12.3); the
+   * UI only surfaces the control to the owner and never for the owner's own
+   * row (Req 12.5, 12.7). Refreshes the member list on success.
+   */
+  removeMember: (uid: string) => Promise<void>;
 }
 
 const FamilyContext = createContext<UseFamilyResult | null>(null);
@@ -180,6 +190,22 @@ export function FamilyProvider({
         // is stored on first create/join and backfilled on every resolution
         // (Req 2.7, 2.8), then populate members from the profile-backed list.
         await upsertCurrentMemberProfile(resolved.id, member);
+        // Best-effort, non-blocking ownerUid backfill for legacy families: the
+        // original creator (memberUids[0]) claims ownership when none is set
+        // (Req 12.2). A failure is logged and resolution still completes.
+        let resolvedFamily = resolved;
+        try {
+          await familyRepository.claimOwnershipIfUnset(resolved.id, member.uid);
+          if (resolved.ownerUid === '' && resolved.memberUids[0] === member.uid) {
+            // Reflect the just-claimed ownership locally without an extra read.
+            resolvedFamily = { ...resolved, ownerUid: member.uid };
+          }
+        } catch (error) {
+          console.warn(
+            `Failed to backfill family ownership for ${resolved.id}:`,
+            error,
+          );
+        }
         if (resolutionRef.current !== resolutionId) {
           return;
         }
@@ -187,7 +213,7 @@ export function FamilyProvider({
         if (resolutionRef.current !== resolutionId) {
           return;
         }
-        setFamily(resolved);
+        setFamily(resolvedFamily);
         setMembers(familyMembers);
         setStatus('ready');
       } catch {
@@ -263,24 +289,55 @@ export function FamilyProvider({
     setMigrationFailures([]);
   }, []);
 
+  // Remove another member from the resolved family (owner-only, Req 12.3), then
+  // refresh the member list so the removed row disappears.
+  const removeMember = useCallback(
+    async (uid: string): Promise<void> => {
+      if (family === null) {
+        throw new Error('Cannot remove a member without a resolved family.');
+      }
+      await familyRepository.removeMember(family.id, uid);
+      const familyMembers = await familyRepository.listMembers(family.id);
+      setMembers(familyMembers);
+      setFamily((current) =>
+        current === null
+          ? current
+          : {
+              ...current,
+              memberUids: current.memberUids.filter((m) => m !== uid),
+            },
+      );
+    },
+    [familyRepository, family],
+  );
+
+  const ownerUid = family?.ownerUid && family.ownerUid !== '' ? family.ownerUid : null;
+  const isOwner = ownerUid !== null && member?.uid === ownerUid;
+
   const value = useMemo<UseFamilyResult>(
     () => ({
       family,
       members,
       status,
+      ownerUid,
+      isOwner,
       migrationFailures,
       dismissMigrationFailures,
       createFamily,
       joinFamily,
+      removeMember,
     }),
     [
       family,
       members,
       status,
+      ownerUid,
+      isOwner,
       migrationFailures,
       dismissMigrationFailures,
       createFamily,
       joinFamily,
+      removeMember,
     ],
   );
 
