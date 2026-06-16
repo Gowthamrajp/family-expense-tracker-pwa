@@ -123,6 +123,27 @@ export function FamilyProvider({
   // sessionEpoch change and at the start of each create/join action.
   const resolutionRef = useRef(0);
 
+  // Best-effort, non-blocking upsert of the current member's Member_Profile
+  // after a family is resolved. Stores the profile when a member first
+  // creates/joins (Req 2.7) and backfills members who joined before profiles
+  // existed, since it runs on every family resolution (Req 2.8). Targets only
+  // the caller's own members/{uid} document, so it is always permitted. A
+  // failure is logged and swallowed so it never blocks reaching the ready
+  // state.
+  const upsertCurrentMemberProfile = useCallback(
+    async (familyId: string, currentMember: FamilyMember): Promise<void> => {
+      try {
+        await familyRepository.upsertMemberProfile(familyId, currentMember);
+      } catch (error) {
+        console.warn(
+          `Failed to upsert member profile for ${currentMember.uid} in family ${familyId}:`,
+          error,
+        );
+      }
+    },
+    [familyRepository],
+  );
+
   // Resolve the current member's family once auth settles. Re-runs whenever the
   // signed-in member changes or a Session ends (sessionEpoch increments).
   useEffect(() => {
@@ -155,6 +176,13 @@ export function FamilyProvider({
           setStatus('no-family');
           return;
         }
+        // Upsert the current member's profile (best-effort, non-blocking) so it
+        // is stored on first create/join and backfilled on every resolution
+        // (Req 2.7, 2.8), then populate members from the profile-backed list.
+        await upsertCurrentMemberProfile(resolved.id, member);
+        if (resolutionRef.current !== resolutionId) {
+          return;
+        }
         const familyMembers = await familyRepository.listMembers(resolved.id);
         if (resolutionRef.current !== resolutionId) {
           return;
@@ -173,7 +201,7 @@ export function FamilyProvider({
         setStatus('error');
       }
     })();
-  }, [familyRepository, member, authStatus, sessionEpoch]);
+  }, [familyRepository, member, authStatus, sessionEpoch, upsertCurrentMemberProfile]);
 
   const createFamily = useCallback(
     async (name?: string): Promise<void> => {
@@ -185,6 +213,9 @@ export function FamilyProvider({
       resolutionRef.current = resolutionId;
 
       const created = await familyRepository.createFamily(member, name);
+      // Upsert the creator's profile (best-effort, non-blocking) before listing
+      // members so the member list shows a real name (Req 2.7).
+      await upsertCurrentMemberProfile(created.family.id, member);
       const familyMembers = await familyRepository.listMembers(created.family.id);
       // A Session change during the create supersedes this result.
       if (resolutionRef.current !== resolutionId) {
@@ -196,7 +227,7 @@ export function FamilyProvider({
       setMigrationFailures(created.migrationFailures);
       setStatus('ready');
     },
-    [familyRepository, member],
+    [familyRepository, member, upsertCurrentMemberProfile],
   );
 
   const joinFamily = useCallback(
@@ -214,6 +245,9 @@ export function FamilyProvider({
         inviteCode,
         member,
       );
+      // Upsert the joining member's profile (best-effort, non-blocking) before
+      // listing members so the member list shows a real name (Req 2.7).
+      await upsertCurrentMemberProfile(joined.id, member);
       const familyMembers = await familyRepository.listMembers(joined.id);
       if (resolutionRef.current !== resolutionId) {
         return;
@@ -222,7 +256,7 @@ export function FamilyProvider({
       setMembers(familyMembers);
       setStatus('ready');
     },
-    [familyRepository, member],
+    [familyRepository, member, upsertCurrentMemberProfile],
   );
 
   const dismissMigrationFailures = useCallback((): void => {

@@ -23,6 +23,14 @@
  *   save-failed error is shown and all entered values are retained so the
  *   member can retry (Req 3.12);
  * - on success, shows a confirmation indication and clears all fields (Req 3.11).
+ *
+ * EDIT MODE (Req 3.13, 3.14, 3.16): when an `existingExpense` prop is supplied,
+ * the same form runs in edit mode. It pre-populates its controlled state from
+ * the stored Expense (amount, `categoryId`, source, `subSourceId`, date, and
+ * description — Req 3.13), validates identically (Req 3.16), and on submit
+ * calls {@link useExpenses}'s `updateExpense(existingExpense.id, input)` instead
+ * of `addExpense` (Req 3.14). The optional `onSaved` callback is invoked after a
+ * successful create OR update so a host (e.g. an edit modal) can close/refresh.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -37,9 +45,10 @@ import {
   validateDescription,
   type FieldErrors,
 } from '../domain/validation';
-import { SOURCES, type ExpenseInput, type Source } from '../domain/types';
+import { SOURCES, type Expense, type ExpenseInput, type Source } from '../domain/types';
 import { useAuth } from '../state/AuthProvider';
 import { useCategories } from '../state/useCategories';
+import { useExpenses } from '../state/useExpenses';
 import { useSubSources } from '../state/useSubSources';
 
 /**
@@ -54,6 +63,9 @@ const SAVE_FAILED_MESSAGE =
 
 /** Message shown when an expense is stored successfully (Req 3.11). */
 const SAVE_SUCCESS_MESSAGE = 'Expense saved.';
+
+/** Message shown when an edited expense is updated successfully (Req 3.14). */
+const UPDATE_SUCCESS_MESSAGE = 'Changes saved.';
 
 /** Shared classes for ghost form controls (inputs, selects, textarea). */
 const CONTROL_CLASS = 'ghost-input px-3 py-2.5 text-body-md w-full';
@@ -81,6 +93,36 @@ const EMPTY_FORM: FormState = {
   date: '',
   description: '',
 };
+
+/**
+ * Format a stored {@link Date} as the `yyyy-mm-dd` value a native date input
+ * expects. Uses local-date components (not UTC) so the populated day matches
+ * the date the member originally chose regardless of timezone.
+ */
+function toDateInputValue(date: Date): string {
+  const year = date.getFullYear().toString().padStart(4, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Build the initial controlled {@link FormState} for edit mode from a stored
+ * {@link Expense} (Req 3.13). The canonical category reference is `categoryId`;
+ * the amount is rendered with its stored precision and the date is formatted to
+ * the date input's `yyyy-mm-dd` value. An absent `subSourceId` maps to the
+ * empty "no specific card/account" selection.
+ */
+function formStateFromExpense(expense: Expense): FormState {
+  return {
+    amount: expense.amount.toString(),
+    category: expense.categoryId ?? '',
+    source: expense.source,
+    subSource: expense.subSourceId ?? '',
+    date: toDateInputValue(expense.date),
+    description: expense.description,
+  };
+}
 
 /** Submission lifecycle, separate from per-field validation state. */
 type SaveState =
@@ -167,23 +209,53 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 }
 
 /**
+ * Props for {@link ExpenseEntryForm}. Mirrors the design's
+ * `ExpenseEntryFormProps`.
+ */
+interface ExpenseEntryFormProps {
+  /**
+   * The active family's id, used both to load the family's Categories/SubSources
+   * ({@link useCategories}/{@link useSubSources}) and to scope the write via the
+   * {@link useExpenses} actions. Defaults to `null` until routing wiring lands;
+   * while `null` the selects are empty and a submit is treated as a save error
+   * so no unscoped write is attempted.
+   */
+  familyId?: string | null;
+  /**
+   * When present, the form runs in EDIT mode (Req 3.13): it pre-populates from
+   * this Expense and submits via `updateExpense(existingExpense.id, input)`
+   * instead of `addExpense` (Req 3.14).
+   */
+  existingExpense?: Expense;
+  /** Invoked after a successful create or update so a host can close/refresh. */
+  onSaved?: () => void;
+}
+
+/**
  * Render the expense entry form.
  *
- * @param familyId - The active family's id, used both to load the family's
- *   Categories/SubSources ({@link useCategories}/{@link useSubSources}) and to
- *   scope the write via {@link expenseRepository.addExpense}. Defaults to `null`
- *   until the `FamilyProvider`/routing wiring lands; while `null` the selects
- *   are empty and a submit is treated as a save error so no unscoped write is
- *   attempted.
+ * @param familyId - The active family's id (see {@link ExpenseEntryFormProps}).
+ * @param existingExpense - When provided, switches the form to edit mode and
+ *   pre-populates it from the stored Expense (Req 3.13).
+ * @param onSaved - Called after a successful create or update.
  */
 export function ExpenseEntryForm({
   familyId = null,
-}: { familyId?: string | null } = {}): JSX.Element {
+  existingExpense,
+  onSaved,
+}: ExpenseEntryFormProps = {}): JSX.Element {
+  const isEditMode = existingExpense !== undefined;
+
   const { member } = useAuth();
   const { categories } = useCategories(familyId);
-  const { forSource } = useSubSources(familyId);
+  const { forSource, status: subSourcesStatus } = useSubSources(familyId);
+  const { updateExpense } = useExpenses(familyId);
 
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [form, setForm] = useState<FormState>(() =>
+    existingExpense !== undefined
+      ? formStateFromExpense(existingExpense)
+      : EMPTY_FORM,
+  );
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saveState, setSaveState] = useState<SaveState>({ kind: 'idle' });
 
@@ -202,8 +274,14 @@ export function ExpenseEntryForm({
 
   // Reset the SubSource selection whenever the Source changes (or its available
   // sub-sources change) so a stale sub-source from a different source is never
-  // submitted (Req 3.8).
+  // submitted (Req 3.8). In edit mode the pre-populated sub-source must survive
+  // until its sub-sources have actually loaded, so the reset is deferred while
+  // the sub-source subscription is still `loading` — otherwise the initial
+  // empty options would wrongly clear a valid stored selection (Req 3.13).
   useEffect(() => {
+    if (subSourcesStatus === 'loading') {
+      return;
+    }
     setForm((current) => {
       if (current.subSource === '') {
         return current;
@@ -213,7 +291,7 @@ export function ExpenseEntryForm({
       );
       return stillValid ? current : { ...current, subSource: '' };
     });
-  }, [subSourceOptions]);
+  }, [subSourceOptions, subSourcesStatus]);
 
   const updateField = useCallback(
     <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -311,16 +389,29 @@ export function ExpenseEntryForm({
       setSaveState({ kind: 'saving' });
 
       try {
-        await withTimeout(
-          expenseRepository.addExpense(familyId, expenseInput, member),
+        // In edit mode, update the existing expense via the family-scoped hook
+        // action (preserves recordedBy/createdAt, stamps updatedBy/updatedAt —
+        // Req 3.14, 3.15); otherwise create a new one. Both writes share the
+        // same 10-second timeout/retention behavior (Req 3.12).
+        await withTimeout<void>(
+          isEditMode
+            ? updateExpense(existingExpense.id, expenseInput)
+            : expenseRepository
+                .addExpense(familyId, expenseInput, member)
+                .then(() => undefined),
           SAVE_TIMEOUT_MS,
         );
         if (saveAttemptRef.current !== attemptId) {
           return;
         }
-        // Success: confirm and clear every field (Req 3.11).
-        setForm(EMPTY_FORM);
+        // Success: confirm. In create mode clear every field (Req 3.11); in edit
+        // mode retain the saved values so the form keeps showing what was stored.
+        if (!isEditMode) {
+          setForm(EMPTY_FORM);
+        }
         setSaveState({ kind: 'success' });
+        // Notify the host (e.g. an edit modal) after a successful save.
+        onSaved?.();
       } catch {
         if (saveAttemptRef.current !== attemptId) {
           return;
@@ -329,7 +420,16 @@ export function ExpenseEntryForm({
         setSaveState({ kind: 'error' });
       }
     },
-    [form, member, familyId, categories],
+    [
+      form,
+      member,
+      familyId,
+      categories,
+      isEditMode,
+      existingExpense,
+      updateExpense,
+      onSaved,
+    ],
   );
 
   const descriptionLength = useMemo(
@@ -344,7 +444,9 @@ export function ExpenseEntryForm({
         noValidate
         className="glass-card p-card_padding w-full max-w-xl flex flex-col gap-5"
       >
-        <h1 className="text-headline-lg font-bold text-on-surface">Add expense</h1>
+        <h1 className="text-headline-lg font-bold text-on-surface">
+          {isEditMode ? 'Edit expense' : 'Add expense'}
+        </h1>
 
         {/* Amount: required, numeric, 0.01..999,999,999.99, <= 2 decimals (Req 3.1, 3.4). */}
         <div className="flex flex-col gap-1.5">
@@ -535,7 +637,7 @@ export function ExpenseEntryForm({
         {/* Success confirmation; fields are cleared on success (Req 3.11). */}
         {saveState.kind === 'success' && (
           <p role="status" aria-live="polite" className="text-primary-container text-sm">
-            {SAVE_SUCCESS_MESSAGE}
+            {isEditMode ? UPDATE_SUCCESS_MESSAGE : SAVE_SUCCESS_MESSAGE}
           </p>
         )}
 
@@ -548,7 +650,11 @@ export function ExpenseEntryForm({
           <span className="material-symbols-outlined text-lg" aria-hidden="true">
             save
           </span>
-          {isSaving ? 'Saving…' : 'Save expense'}
+          {isSaving
+            ? 'Saving…'
+            : isEditMode
+              ? 'Save changes'
+              : 'Save expense'}
         </button>
       </form>
     </div>

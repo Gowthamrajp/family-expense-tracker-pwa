@@ -26,7 +26,8 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { expenseRepository } from '../data/expenseRepository';
 import { sortByDateDesc } from '../domain/sorting';
-import type { Expense } from '../domain/types';
+import type { Expense, ExpenseInput } from '../domain/types';
+import { useAuth } from './AuthProvider';
 
 /** Lifecycle status of the expense subscription. */
 export type ExpensesStatus = 'loading' | 'ready' | 'error';
@@ -42,6 +43,21 @@ export interface UseExpensesResult {
   status: ExpensesStatus;
   /** Re-attempt the subscription after a read failure (Req 3.9, 4.7). */
   retry: () => void;
+  /**
+   * Update an existing expense with re-validated fields, delegating to the
+   * family-scoped {@link expenseRepository} with the active `familyId` and the
+   * current `member`. Any member of the family may edit any expense (Req 3.19);
+   * the repository preserves the original recorder/creation time and stamps
+   * `updatedBy`/`updatedAt`. The live subscription reflects the result, so
+   * callers do not manually refresh (Req 3.14, 3.15).
+   */
+  updateExpense: (expenseId: string, input: ExpenseInput) => Promise<void>;
+  /**
+   * Delete an expense from the active family, delegating to the family-scoped
+   * {@link expenseRepository}. Any member of the family may delete any expense
+   * (Req 3.18, 3.19). The live subscription reflects the result.
+   */
+  deleteExpense: (expenseId: string) => Promise<void>;
 }
 
 /**
@@ -52,14 +68,17 @@ export interface UseExpensesResult {
  *   task 28.4 wires it; call sites currently pass `null`.)
  * @param active - Whether a Session is active. When `false`, the hook does not
  *   subscribe and reports `loading` with no data. Defaults to `true`.
- * @returns The current expenses, subscription status, and a `retry` control.
+ * @returns The current expenses, subscription status, a `retry` control, and
+ *   `updateExpense`/`deleteExpense` actions.
  *
- * Validates: Requirements 3.1, 3.5, 3.8, 3.9, 4.5, 4.7, 6.1, 6.5
+ * Validates: Requirements 3.1, 3.5, 3.8, 3.9, 3.14, 3.15, 3.18, 3.19, 4.5, 4.7, 6.1, 6.5
  */
 export function useExpenses(
   familyId: string | null,
   active: boolean = true,
 ): UseExpensesResult {
+  const { member } = useAuth();
+
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [status, setStatus] = useState<ExpensesStatus>('loading');
 
@@ -103,5 +122,33 @@ export function useExpenses(
     return unsubscribe;
   }, [familyId, active, subscriptionAttempt]);
 
-  return { expenses, status, retry };
+  const updateExpense = useCallback(
+    async (expenseId: string, input: ExpenseInput): Promise<void> => {
+      if (familyId === null) {
+        throw new Error('Cannot update an expense without an active family.');
+      }
+      if (member === null) {
+        throw new Error('Cannot update an expense without an authenticated member.');
+      }
+      // Delegate to the family-scoped repository with the active familyId and
+      // the current member so it can stamp `updatedBy`. The live subscription
+      // reflects the edit; no manual refresh is needed (Req 3.14, 3.15, 3.19).
+      await expenseRepository.updateExpense(familyId, expenseId, input, member);
+    },
+    [familyId, member],
+  );
+
+  const deleteExpense = useCallback(
+    async (expenseId: string): Promise<void> => {
+      if (familyId === null) {
+        throw new Error('Cannot delete an expense without an active family.');
+      }
+      // Any member of the family may delete any expense (Req 3.18, 3.19). The
+      // live subscription reflects the removal; no manual refresh is needed.
+      await expenseRepository.deleteExpense(familyId, expenseId);
+    },
+    [familyId],
+  );
+
+  return { expenses, status, retry, updateExpense, deleteExpense };
 }

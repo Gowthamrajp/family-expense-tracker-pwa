@@ -177,6 +177,16 @@ export interface Expense extends ExpenseInput {
   recordedByName?: string;
   /** Creation timestamp recorded with the expense (Req 3.3). */
   createdAt: Date;
+  /**
+   * Uid of the member who last edited the expense, set on edit (Req 3.15).
+   * Absent until the expense has been edited at least once.
+   */
+  updatedBy?: string;
+  /**
+   * Timestamp of the last edit, set on edit (Req 3.15). Absent until the
+   * expense has been edited at least once.
+   */
+  updatedAt?: Date;
 }
 
 /**
@@ -217,6 +227,32 @@ export interface ExpenseDocument {
   recordedByName?: string;
   /** serverTimestamp() at creation. */
   createdAt: FirestoreTimestamp;
+  /** Uid of the member who last edited the expense, set on edit (Req 3.15). */
+  updatedBy?: string;
+  /** serverTimestamp() at edit, set on edit (Req 3.15). */
+  updatedAt?: FirestoreTimestamp;
+}
+
+/**
+ * Fields written by `updateExpense` when a Family_Member edits an existing
+ * Expense. `recordedBy`/`createdAt` are intentionally absent so the original
+ * recorder identity and creation time are preserved (Req 3.15); `updatedBy`/
+ * `updatedAt` are stamped with the editor and the edit time.
+ * See design "Firestore representation".
+ */
+export interface ExpenseUpdateDocument {
+  amount: number;
+  /** Family Category id (Req 3.2, 3.14). */
+  categoryId: string;
+  source: string;
+  /** Omitted (or field-deleted) when no sub-source is chosen. */
+  subSourceId?: string;
+  date: FirestoreTimestamp;
+  description: string;
+  /** request.auth.uid of the editor (Req 3.15). */
+  updatedBy: string;
+  /** serverTimestamp() at edit (Req 3.15). */
+  updatedAt: FirestoreTimestamp;
 }
 
 /**
@@ -268,6 +304,39 @@ export interface FamilyMember {
   uid: string;
   displayName: string | null;
   email: string | null;
+}
+
+/**
+ * A per-Family Member_Profile, stored under `families/{familyId}/members/{uid}`.
+ * Gives the member list a readable name for every member of the Family rather
+ * than only a uid (Req 2.7, 2.9).
+ */
+export interface MemberProfile {
+  /** Matches the document id and the member's auth uid. */
+  uid: string;
+  /** Member's display name when available (Req 2.7). */
+  displayName: string | null;
+  /** Fallback identity when no display name is available (Req 2.7, 2.9). */
+  email: string | null;
+  /** First time the profile was written (create/join). */
+  joinedAt: Date;
+  /** Last upsert time, refreshed on each sign-in (Req 2.8). */
+  updatedAt: Date;
+}
+
+/**
+ * Document shape stored at `families/{familyId}/members/{uid}` (the document id
+ * is the member's uid). See design "Firestore representation".
+ */
+export interface MemberProfileDocument {
+  /** Member's display name when available (Req 2.7). */
+  displayName: string | null;
+  /** Fallback identity when no display name is available (Req 2.7, 2.9). */
+  email: string | null;
+  /** serverTimestamp() on first write. */
+  joinedAt: FirestoreTimestamp;
+  /** serverTimestamp() on each upsert (Req 2.8). */
+  updatedAt: FirestoreTimestamp;
 }
 
 /**
@@ -329,6 +398,18 @@ export interface MigrationFailure {
   legacyId: string;
   /** Why the expense could not be mapped/migrated. */
   reason: string;
+}
+
+/**
+ * Reason a category or sub-source delete was blocked: it is still referenced by
+ * one or more Expenses in the Family. Discriminated by `kind`. The `count` is
+ * the exact number of referencing Expenses, surfaced in the in-use message
+ * (Req 4.9, 5.10). See design "In-use reference counting".
+ */
+export interface InUseError {
+  kind: 'in-use';
+  /** Number of expenses referencing the category/sub-source (Req 4.9, 5.10). */
+  count: number;
 }
 
 /**

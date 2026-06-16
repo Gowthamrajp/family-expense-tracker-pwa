@@ -10,22 +10,37 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
+  doc,
+  getCountFromServer,
+  getDocs,
   onSnapshot,
+  query,
+  where,
   type DocumentData,
   type QueryDocumentSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
 
 import type {
+  InUseError,
+  Result,
   Source,
   SubSource,
   SubSourceDocument,
   SubSourceInput,
 } from '../domain/types';
+import { err, ok } from '../domain/types';
 import { firestore } from './firebase';
+
+/** Name of the top-level families collection. */
+const FAMILIES_COLLECTION = 'families';
 
 /** Name of the family-scoped Firestore collection holding sub-sources. */
 const SUB_SOURCES_COLLECTION = 'subSources';
+
+/** Name of the per-family expenses subcollection (used for in-use counting). */
+const EXPENSES_COLLECTION = 'expenses';
 
 /**
  * Build the path to a family's `subSources` subcollection. Centralizing this
@@ -34,6 +49,43 @@ const SUB_SOURCES_COLLECTION = 'subSources';
  */
 function subSourcesPath(familyId: string): string[] {
   return ['families', familyId, SUB_SOURCES_COLLECTION];
+}
+
+/** Build a reference to the `families/{familyId}/expenses` subcollection. */
+function expensesCollection(familyId: string) {
+  return collection(
+    firestore,
+    FAMILIES_COLLECTION,
+    familyId,
+    EXPENSES_COLLECTION,
+  );
+}
+
+/**
+ * Count the expenses in the family that reference `subSourceId`.
+ *
+ * Uses Firestore's aggregate `getCountFromServer(query)` when available, which
+ * returns the count without transferring documents. If the aggregate API
+ * throws or is unavailable in the runtime, falls back to a bounded `getDocs`
+ * read and counts the returned snapshots (design "In-use reference counting").
+ */
+async function countReferencingExpenses(
+  familyId: string,
+  subSourceId: string,
+): Promise<number> {
+  const referencingQuery = query(
+    expensesCollection(familyId),
+    where('subSourceId', '==', subSourceId),
+  );
+  try {
+    const snapshot = await getCountFromServer(referencingQuery);
+    return snapshot.data().count;
+  } catch {
+    // Aggregate API unavailable/unsupported: fall back to reading the matching
+    // documents and counting them.
+    const snapshot = await getDocs(referencingQuery);
+    return snapshot.size;
+  }
 }
 
 /**
@@ -65,6 +117,23 @@ export interface SubSourceRepository {
    * Validates: Requirements 5.2
    */
   addSubSource(familyId: string, input: SubSourceInput): Promise<string>;
+
+  /**
+   * Delete a sub-source only when no Expense in the family references it.
+   *
+   * First counts the referencing expenses by querying the family's `expenses`
+   * subcollection where `subSourceId == subSourceId` (see design "In-use
+   * reference counting"). When the count is greater than zero, returns
+   * `err({ kind: 'in-use', count })` and performs NO delete (Req 5.10). When the
+   * count is zero, deletes the sub-source document and returns `ok(undefined)`
+   * (Req 5.9).
+   *
+   * Validates: Requirements 5.8, 5.9, 5.10
+   */
+  deleteSubSource(
+    familyId: string,
+    subSourceId: string,
+  ): Promise<Result<void, InUseError>>;
 }
 
 /**
@@ -128,5 +197,22 @@ export const subSourceRepository: SubSourceRepository = {
     const [root, id, sub] = subSourcesPath(familyId);
     const ref = await addDoc(collection(firestore, root, id, sub), docData);
     return ref.id;
+  },
+
+  async deleteSubSource(
+    familyId: string,
+    subSourceId: string,
+  ): Promise<Result<void, InUseError>> {
+    // Count referencing expenses first; a sub-source in use by one or more
+    // expenses must NOT be deleted (Req 5.10).
+    const count = await countReferencingExpenses(familyId, subSourceId);
+    if (count > 0) {
+      return err({ kind: 'in-use', count });
+    }
+
+    // No expense references the sub-source: remove the document (Req 5.9).
+    const [root, id, sub] = subSourcesPath(familyId);
+    await deleteDoc(doc(firestore, root, id, sub, subSourceId));
+    return ok(undefined);
   },
 };

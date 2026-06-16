@@ -14,7 +14,14 @@ This revision designs the **expansion** of that MVP. It keeps the thin serverles
 - **Data migration** — first-family creation migrates existing top-level expenses into the new family-scoped structure, safely and idempotently.
 - **Family-scoped security rules** — access is gated on the caller's family membership rather than only on being authenticated.
 
-This revision is a behavioral and data-model expansion only. It intentionally **does not** introduce a visual redesign and **does not** change the technology stack: the app remains React + Vite + TypeScript + Firebase, with Recharts for the dashboard and the existing component styling approach. New screens reuse the established UI conventions of the MVP.
+This revision is further expanded with a second round of member-collaboration features layered on top of the structure above:
+
+- **Member profiles** — a `members` subcollection under each family stores each member's display name and email so the member list shows readable names instead of bare uids, with existing members backfilled on sign-in.
+- **Expense edit and delete** — any member of a family may edit or delete any expense in that family (not only the one they recorded), with edits preserving the original recorder/creation time and stamping an editor/update time.
+- **Category and sub-source delete with in-use protection** — a member may delete a category or sub-source that no expense references; an attempt to delete one that is still referenced is blocked and reports how many expenses use it.
+- **Relaxed, still family-scoped access control** — security rules now permit members to update and delete their own family's expenses (and delete categories/sub-sources), while preserving strict cross-family isolation.
+
+This revision is a behavioral and data-model expansion only. It intentionally **does not** introduce a visual redesign and **does not** change the technology stack: the app remains React + Vite + TypeScript + Firebase, with Recharts for the dashboard and the established dark FamilyVault component styling. New and revised screens stay consistent with the existing dark UI; no new build-time dependencies are introduced.
 
 ### Design Goals
 
@@ -178,9 +185,19 @@ interface FamilyRepository {
   getFamilyForMember(uid: string): Promise<Family | null>; // Req 1.11, 2.5
 
   // Lists the members of a family for the settings/members screen.
-  listMembers(familyId: string): Promise<FamilyMember[]>; // Req 2.6
+  listMembers(familyId: string): Promise<FamilyMember[]>; // Req 2.6, 2.9
+
+  // Upserts the caller's own Member_Profile under
+  // families/{familyId}/members/{uid}. Called when a member creates/joins a
+  // family and on every sign-in/family-resolution so members who joined before
+  // profiles existed are backfilled (Req 2.7, 2.8).
+  upsertMemberProfile(familyId: string, member: FamilyMember): Promise<void>; // Req 2.7, 2.8
 }
 ```
+
+`listMembers` is revised to read the `families/{familyId}/members` subcollection (Member_Profile documents) rather than only `memberUids`, so it returns `FamilyMember` objects carrying each member's real `displayName`/`email` for the member list (Req 2.6, 2.9). When a profile document is missing for a uid in `memberUids` (a member who has not yet been backfilled), the member is still returned with `displayName`/`email` null so the row remains present and the UI can fall back to a uid label.
+
+**memberRepository.ts** (optional split) — the member-profile reads/writes above MAY live on `familyRepository` (as shown) or be factored into a thin `memberRepository`; the design treats them as part of the family data surface. They wrap `families/{familyId}/members/{uid}` documents of shape `{ displayName, email, joinedAt, updatedAt }` (see Data Models).
 
 **categoryRepository.ts** (new) — wraps the family's `categories` subcollection.
 
@@ -193,6 +210,15 @@ interface CategoryRepository {
   ): Unsubscribe;                                              // Req 4.2, 4.6
   addCategory(familyId: string, name: string): Promise<string>; // Req 4.3 (returns id)
   seedDefaults(familyId: string): Promise<void>;               // Req 4.1
+
+  // Deletes a category only when no expense in the family references it.
+  // First counts referencing expenses (see "In-use reference counting"); if
+  // the count is > 0, rejects with an InUseError carrying that count and
+  // performs NO delete. Otherwise removes the category document.
+  deleteCategory(
+    familyId: string,
+    categoryId: string
+  ): Promise<Result<void, InUseError>>;                        // Req 4.7, 4.8, 4.9
 }
 ```
 
@@ -206,6 +232,39 @@ interface SubSourceRepository {
     onError: (error: Error) => void
   ): Unsubscribe;                                              // Req 3.7, 5.x
   addSubSource(familyId: string, input: SubSourceInput): Promise<string>; // Req 5.2
+
+  // Deletes a sub-source only when no expense in the family references it.
+  // Counts expenses whose subSourceId == id; if > 0, rejects with an
+  // InUseError carrying that count and performs NO delete. Otherwise removes
+  // the sub-source document.
+  deleteSubSource(
+    familyId: string,
+    subSourceId: string
+  ): Promise<Result<void, InUseError>>;                        // Req 5.8, 5.9, 5.10
+}
+```
+
+#### In-use reference counting (categories and sub-sources)
+
+Deleting a category (Req 4.7–4.9) or a sub-source (Req 5.8–5.10) requires knowing whether any expense still references it, and reporting how many do. Because Firestore Security Rules cannot perform cross-document existence checks cheaply, the in-use check is enforced in the **data/client layer**, which is safe here: members already have read access to their own family's expenses (Req 9.3), so the count is computable client-side without weakening isolation.
+
+The data layer counts referencing expenses by querying the family's `expenses` subcollection on the reference field:
+
+- Category: `families/{familyId}/expenses where categoryId == categoryId`.
+- Sub-source: `families/{familyId}/expenses where subSourceId == subSourceId`.
+
+To report the exact count `N` for the in-use message (Req 4.9, 5.10), the repository uses Firestore's aggregate `getCountFromServer(query)` when available (it returns `N` without transferring documents). If the aggregate API is unavailable in the runtime, it falls back to a bounded `getDocs` read and counts the returned snapshots. Either way:
+
+- If `N > 0`, the repository returns `err({ kind: 'in-use', count: N })` and performs **no** delete (Req 4.9, 5.10).
+- If `N === 0`, the repository deletes the document and returns `ok(undefined)` (Req 4.8, 5.9).
+
+A minimal `limit(1)` existence query is sufficient to decide *whether* to block, but the count query is used so the message can state the precise number of referencing expenses as the requirements call for.
+
+```typescript
+// Reason a category/sub-source delete was blocked. Discriminated by `kind`.
+interface InUseError {
+  kind: 'in-use';
+  count: number; // number of expenses referencing the category/sub-source (Req 4.9, 5.10)
 }
 ```
 
@@ -219,8 +278,25 @@ interface ExpenseRepository {
     onData: (expenses: Expense[]) => void,
     onError: (error: Error) => void
   ): Unsubscribe;                                              // Req 6.1, 6.4, 6.5
+
+  // Updates an existing expense with re-validated fields. Preserves the stored
+  // recordedBy and createdAt unchanged and sets updatedBy (the editing member's
+  // uid) and updatedAt (a server timestamp). Any member of the family may edit
+  // any expense (Req 3.19), so no recorder check is performed here.
+  updateExpense(
+    familyId: string,
+    expenseId: string,
+    input: ExpenseInput,
+    member: FamilyMember
+  ): Promise<void>;                                            // Req 3.14, 3.15
+
+  // Deletes an expense from the family. Any member of the family may delete any
+  // expense (Req 3.18, 3.19).
+  deleteExpense(familyId: string, expenseId: string): Promise<void>; // Req 3.18
 }
 ```
+
+`updateExpense` writes only the user-editable fields plus the `updatedBy`/`updatedAt` audit fields; it does **not** write `recordedBy` or `createdAt`, so the original recorder identity and creation time are preserved (Req 3.15). The live `subscribeToExpenses` listener delivers the edited/deleted document automatically, so the list and dashboard reflect the change without a manual reload (Req 6.5, 7.5).
 
 ### State / Hooks Layer
 
@@ -240,6 +316,8 @@ interface UseFamilyResult {
 
 `status === 'no-family'` drives the `RequireFamily` redirect to `/family` (Req 1.11, 2.7).
 
+**Member-profile upsert (revised FamilyProvider behavior).** After family resolution succeeds, `FamilyProvider` upserts the *current* member's Member_Profile via `familyRepository.upsertMemberProfile(family.id, member)` before (or alongside) calling `listMembers`. This both stores the profile when a member first creates/joins (Req 2.7) and backfills the profile for members who joined before profiles existed, since the upsert runs on every sign-in/family-resolution (Req 2.8). The upsert targets only the caller's own `members/{uid}` document (the security rule forbids writing another member's profile), so it is safe to run unconditionally on resolution. `members` is then populated from `listMembers`, which reads the profile subcollection so the member list shows real names (Req 2.9).
+
 **useExpenses** (revised) — subscribes via `ExpenseRepository.subscribeToExpenses(family.id, ...)` while a Session and family are active.
 
 ```typescript
@@ -247,8 +325,14 @@ interface UseExpensesResult {
   expenses: Expense[];        // already sorted date desc
   status: 'loading' | 'ready' | 'error';
   retry(): void;              // re-attempts subscription (Req 6.9)
+  // Edit/delete actions. Any member of the family may invoke these on any
+  // expense (Req 3.19); the repository performs no recorder check.
+  updateExpense(expenseId: string, input: ExpenseInput): Promise<void>; // Req 3.14, 3.15
+  deleteExpense(expenseId: string): Promise<void>;                      // Req 3.18
 }
 ```
+
+`updateExpense`/`deleteExpense` delegate to the family-scoped `ExpenseRepository`, supplying the active `familyId` and the current `member` (from `useAuth`) so the repository can stamp `updatedBy`. The live subscription reflects the result, so callers do not manually refresh. (These MAY instead be provided by a small dedicated action hook, e.g. `useExpenseActions`, that wraps the same repository calls; the design treats them as part of the expense state surface.)
 
 **useCategories** (new) — subscribes to the family's categories and exposes add with client-side validation feedback:
 
@@ -257,6 +341,8 @@ interface UseCategoriesResult {
   categories: Category[];
   status: 'loading' | 'ready' | 'error';
   addCategory(name: string): Promise<Result<Category, CategoryError>>; // Req 4.3, 4.4, 4.5
+  // Delete a category; blocked when expenses still reference it (Req 4.8, 4.9).
+  deleteCategory(categoryId: string): Promise<Result<void, InUseError>>; // Req 4.7, 4.8, 4.9
 }
 ```
 
@@ -268,6 +354,8 @@ interface UseSubSourcesResult {
   status: 'loading' | 'ready' | 'error';
   addSubSource(input: SubSourceInput): Promise<Result<SubSource, SubSourceError>>; // Req 5.2, 5.3, 5.5
   forSource(source: Source): SubSource[]; // Req 3.7, 5.7
+  // Delete a sub-source; blocked when expenses still reference it (Req 5.9, 5.10).
+  deleteSubSource(subSourceId: string): Promise<Result<void, InUseError>>; // Req 5.8, 5.9, 5.10
 }
 ```
 
@@ -347,7 +435,12 @@ function toFirestore(input: ExpenseInput, member: FamilyMember): ExpenseDocument
 function fromFirestore(id: string, doc: ExpenseDocument): Expense;                // Req 6.2
 // Resolves a stored categoryId/subSourceId to display labels for a row.
 function resolveLabels(exp: Expense, cats: Category[], subs: SubSource[]): ExpenseRow; // Req 6.2, 6.3
+// Maps an edited ExpenseInput onto the update payload, setting updatedBy/updatedAt
+// and NOT touching recordedBy/createdAt (the repository writes these audit fields).
+function toUpdateFields(input: ExpenseInput, member: FamilyMember): ExpenseUpdateDocument; // Req 3.15
 ```
+
+`fromFirestore` is extended to read the optional `updatedBy`/`updatedAt` fields when present so an edited expense round-trips its audit metadata. `resolveLabels` continues to render the same display fields; the optional `updatedBy`/`updatedAt` are not required for the current list row but are preserved on the `Expense` for completeness and future display.
 
 ### UI Layer
 
@@ -358,15 +451,40 @@ All components reuse the existing MVP styling conventions; no restyle or design-
 | `SignIn` | Google sign-in button, error/timeout messages, signed-out landing | 1.1, 1.2, 1.4, 1.8, 1.9 |
 | `AppShell` | Existing nav/header extended with a Family/Settings entry plus the family/member label and sign-out; offline banner | 1.5, 1.6, 8.6, 8.7 |
 | `CreateJoinFamily` (new) | Create-new-family action and join-by-invite-code form with invalid-code messaging | 2.1, 2.2, 2.3, 2.4 |
-| `FamilySettings` (new) | Lists family members, displays the family's invite code for sharing | 2.6 |
-| `CategoryManager` (new) | Lists family categories; add-category form with empty/duplicate validation | 4.2, 4.3, 4.4, 4.5 |
-| `SubSourceManager` (new) | Lists sub-sources by source; add form with nickname + optional last-4 validation | 5.1, 5.2, 5.3, 5.5 |
-| `ExpenseEntryForm` (revised) | Amount/category(**family categories**)/source/**sub-source**/date/description fields, inline validation, confirmation, save-error retention | 3.1–3.12 |
-| `ExpenseList` (revised) | Rows showing category name + recording member, per-row fields, empty state, loading indicator, error + retry | 6.1–6.9 |
+| `FamilySettings` (revised) | Lists family members using `resolveMemberLabel(profile)` over the profile-backed member list, displays the family's invite code for sharing; hosts category/sub-source managers | 2.6, 2.9 |
+| `CategoryManager` (revised) | Lists family categories; add-category form with empty/duplicate validation; **per-item delete (trash) affordance** that surfaces an "In use by N expense(s)" message when blocked | 4.2, 4.3, 4.4, 4.5, 4.7, 4.8, 4.9 |
+| `SubSourceManager` (revised) | Lists sub-sources by source; add form with nickname + optional last-4 validation; **per-item delete (trash) affordance** that surfaces an "In use by N expense(s)" message when blocked | 5.1, 5.2, 5.3, 5.5, 5.8, 5.9, 5.10 |
+| `ExpenseEntryForm` (revised) | Amount/category(**family categories**)/source/**sub-source**/date/description fields, inline validation, confirmation, save-error retention; **also runs in "edit mode"** — accepts an optional existing expense to pre-populate, validates identically, and calls `updateExpense` instead of `addExpense` on submit | 3.1–3.12, 3.13, 3.14, 3.15, 3.16 |
+| `ExpenseList` (revised) | Rows showing category name + recording member, per-row fields, empty state, loading indicator, error + retry; **each row gains Edit and Delete affordances** (Edit opens the entry form in edit mode; Delete asks for confirmation then removes) | 6.1–6.9, 3.13, 3.17, 3.18 |
 | `Dashboard` (revised) | Total "Family Spend" plus Recharts category/source/month charts, empty state, error + retry | 7.1–7.7 |
 | `InstallPrompt` | Surfaces install affordance when `beforeinstallprompt` fires | 8.4 |
 
 `Source` remains a fixed enumeration (Cash, Credit Card, Reward Points, Food Coupon, Cashback Points). Categories and sub-sources are now family-scoped data offered as selectable options in `ExpenseEntryForm` (Req 4.6, 3.7).
+
+#### Expense edit mode (ExpenseEntryForm reuse)
+
+Editing reuses `ExpenseEntryForm` rather than introducing a separate edit screen, so validation, the family-category select, the conditional sub-source select, and the dark FamilyVault styling are identical for create and edit (Req 3.14, 3.16). The form accepts two optional props:
+
+```typescript
+interface ExpenseEntryFormProps {
+  familyId?: string | null;
+  existingExpense?: Expense;     // when present, the form is in EDIT mode (Req 3.13)
+  onSaved?: () => void;          // invoked after a successful create or update
+}
+```
+
+- When `existingExpense` is provided, the form initializes its controlled `FormState` from that expense's stored amount, `categoryId`, source, `subSourceId`, date, and description (Req 3.13), and its submit handler calls `updateExpense(existingExpense.id, input)` instead of `addExpense` (Req 3.14). Validation is unchanged, so an invalid edit surfaces the same per-field messages and writes nothing (Req 3.16).
+- When `existingExpense` is absent, the form behaves exactly as before (create mode).
+
+Editing is entered from an Edit affordance on each `ExpenseList` row. The chosen presentation is a **modal/overlay** that mounts `ExpenseEntryForm` in edit mode (a dedicated `/expenses/:id/edit` route is an acceptable equivalent); on a successful update `onSaved` closes the modal and the live subscription reflects the change (Req 6.5). The modal reuses the existing glass-card styling so the edit experience is visually consistent with the entry screen.
+
+#### Expense delete confirmation
+
+Each `ExpenseList` row has a Delete affordance (Req 3.17). Activating it opens a confirmation prompt (an in-app confirm dialog consistent with the dark UI); confirming calls `deleteExpense(expenseId)` and the live subscription removes the row (Req 3.18). Any member may delete any expense in their family, so no recorder check gates the affordance (Req 3.19).
+
+#### Category and sub-source delete affordances
+
+`CategoryManager` and `SubSourceManager` render a trash (delete) control on each listed item. Activating it calls `deleteCategory(id)` / `deleteSubSource(id)`. On an `ok` result the live subscription removes the item; on an `err({ kind: 'in-use', count })` result the manager surfaces an inline message — "In use by N expense(s)" — and the item remains (Req 4.9, 5.10). A confirmation prompt precedes the delete to avoid accidental removal.
 
 ## Data Models
 
@@ -423,9 +541,21 @@ interface ExpenseInput {
 // Full client-side expense read back from the Data_Store.
 interface Expense extends ExpenseInput {
   id: string;
-  recordedBy: string;     // FamilyMember uid (Req 3.3)
+  recordedBy: string;     // FamilyMember uid (Req 3.3) — preserved across edits (Req 3.15)
   recordedByName: string; // denormalized display name for list rendering (Req 6.2)
-  createdAt: Date;        // creation timestamp (Req 3.3)
+  createdAt: Date;        // creation timestamp (Req 3.3) — preserved across edits (Req 3.15)
+  updatedBy?: string;     // editing member's uid, set on edit (Req 3.15)
+  updatedAt?: Date;       // update timestamp, set on edit (Req 3.15)
+}
+
+// A per-family Member_Profile, stored under families/{familyId}/members/{uid}.
+// Gives the member list a readable name for every member (Req 2.7, 2.9).
+interface MemberProfile {
+  uid: string;                  // matches the document id and the member's auth uid
+  displayName: string | null;   // member's display name when available (Req 2.7)
+  email: string | null;         // fallback identity when no display name (Req 2.7, 2.9)
+  joinedAt: Date;               // first time the profile was written (create/join)
+  updatedAt: Date;              // last upsert time (refreshed on each sign-in, Req 2.8)
 }
 
 // An authenticated user. familyId is resolved via the users/{uid} routing doc.
@@ -451,6 +581,29 @@ interface ExpenseDocument {
   recordedBy: string;        // request.auth.uid
   recordedByName: string;    // denormalized for rendering
   createdAt: Timestamp;      // serverTimestamp()
+  updatedBy?: string;        // editing member's uid, set on edit (Req 3.15)
+  updatedAt?: Timestamp;     // serverTimestamp() at edit, set on edit (Req 3.15)
+}
+
+// Fields written by updateExpense. recordedBy/createdAt are intentionally
+// absent so the original recorder identity and creation time are preserved
+// (Req 3.15); updatedBy/updatedAt are stamped with the editor and edit time.
+interface ExpenseUpdateDocument {
+  amount: number;
+  categoryId: string;
+  source: string;
+  subSourceId?: string;      // omitted (or field-deleted) when no sub-source is chosen
+  date: Timestamp;
+  description: string;
+  updatedBy: string;         // request.auth.uid of the editor
+  updatedAt: Timestamp;      // serverTimestamp()
+}
+
+interface MemberProfileDocument {
+  displayName: string | null; // Req 2.7
+  email: string | null;       // Req 2.7, 2.9
+  joinedAt: Timestamp;        // serverTimestamp() on first write
+  updatedAt: Timestamp;       // serverTimestamp() on each upsert (Req 2.8)
 }
 
 interface FamilyDocument {
@@ -481,7 +634,11 @@ families/{familyId}
 
 families/{familyId}/expenses/{expenseId}
   amount, categoryId, source, subSourceId?, date,
-  description, recordedBy, recordedByName, createdAt
+  description, recordedBy, recordedByName, createdAt,
+  updatedBy?, updatedAt?                     // set when an expense is edited (Req 3.15)
+
+families/{familyId}/members/{uid}           // Member_Profile, doc id == member uid
+  displayName, email, joinedAt, updatedAt    // readable member names (Req 2.7, 2.8, 2.9)
 
 families/{familyId}/categories/{categoryId}
   name
@@ -499,15 +656,17 @@ erDiagram
     FAMILY ||--o{ EXPENSE : contains
     FAMILY ||--o{ CATEGORY : contains
     FAMILY ||--o{ SUBSOURCE : contains
+    FAMILY ||--o{ MEMBERPROFILE : contains
     CATEGORY ||--o{ EXPENSE : "classifies"
     SUBSOURCE ||--o{ EXPENSE : "refines source of"
     INVITECODE ||--|| FAMILY : "indexes"
 
     USER { string uid string familyId }
     FAMILY { string id string name string inviteCode datetime createdAt array memberUids }
-    EXPENSE { string id number amount string categoryId string source string subSourceId datetime date string description string recordedBy string recordedByName datetime createdAt }
+    EXPENSE { string id number amount string categoryId string source string subSourceId datetime date string description string recordedBy string recordedByName datetime createdAt string updatedBy datetime updatedAt }
     CATEGORY { string id string name }
     SUBSOURCE { string id string source string nickname string last4 }
+    MEMBERPROFILE { string uid string displayName string email datetime joinedAt datetime updatedAt }
     INVITECODE { string code string familyId }
 ```
 
@@ -602,38 +761,64 @@ service cloud.firestore {
         allow read: if isMember(familyId);
         allow create: if isMember(familyId)
                       && request.resource.data.recordedBy == request.auth.uid;
-        allow update, delete: if false;        // editing/deleting out of scope
+        // Any member may edit/delete any expense in their family (Req 9.4).
+        // Cross-family callers are rejected by isMember (Req 9.5). The rule
+        // cannot cheaply assert recordedBy is unchanged on update, so that
+        // preservation (Req 3.15) is enforced in the data layer, which writes
+        // only the editable fields plus updatedBy/updatedAt.
+        allow update, delete: if isMember(familyId);
       }
       match /categories/{categoryId} {
         allow read: if isMember(familyId);
         allow create: if isMember(familyId);
-        allow update, delete: if false;        // only adding is in scope
+        // Members may delete a category in their family (Req 9.4). The in-use
+        // block (Req 4.9) is enforced in the data layer (see note below).
+        allow delete: if isMember(familyId);
+        allow update: if false;                // editing a category is out of scope
       }
       match /subSources/{subSourceId} {
         allow read: if isMember(familyId);
-        // No-full-card-number guarantee: reject any payload with extra fields;
-        // only source, nickname, and an optional 4-digit last4 are allowed.
+        // No-full-card-number guarantee (Req 9.7, 5.6): reject any payload with
+        // extra fields; only source, nickname, and an optional 4-digit last4
+        // are allowed.
         allow create: if isMember(familyId)
                       && request.resource.data.keys().hasOnly(['source','nickname','last4'])
                       && request.resource.data.nickname is string
                       && (!('last4' in request.resource.data)
                           || request.resource.data.last4.matches('^[0-9]{4}$'));
-        allow update, delete: if false;        // only adding is in scope
+        // Members may delete a sub-source in their family (Req 9.4). The in-use
+        // block (Req 5.10) is enforced in the data layer (see note below).
+        allow delete: if isMember(familyId);
+        allow update: if false;                // editing a sub-source is out of scope
+      }
+      // Member_Profile: any member may read every profile in their family so
+      // the member list can show readable names (Req 2.6, 2.9); a member may
+      // write ONLY their own profile document (Req 2.7, 2.8).
+      match /members/{uid} {
+        allow read: if isMember(familyId);
+        allow create, update: if isMember(familyId) && request.auth.uid == uid;
+        allow delete: if false;
       }
     }
   }
 }
 ```
 
-This enforces Requirement 9: requests from non-members are denied for both reads and writes (9.1, 9.2); members are granted access only to their own family's records (9.3); and the sub-source create rule structurally guarantees no full card number is ever stored (9.5, 5.6) by allowlisting fields and constraining `last4` to exactly four digits.
+This enforces Requirement 9: requests from non-members are denied for both reads and writes (9.1, 9.2); members are granted access only to their own family's records (9.3); members may now create, update, and delete their own family's expenses and delete categories/sub-sources (9.4); update/delete requests from non-members are denied by `isMember` (9.5, which mirrors 9.2 for mutations); and the sub-source create rule structurally guarantees no full card number is ever stored (9.7, 5.6) by allowlisting fields and constraining `last4` to exactly four digits.
+
+**Cross-family isolation is preserved.** Relaxing expense `update`/`delete` and category/sub-source `delete` to `isMember(familyId)` widens *who within a family* may mutate, not *which family's data* is reachable: every allow still requires the caller's `users/{uid}.familyId` to equal the path's `familyId`, so a member of family A can never touch family B's records. No rule was weakened to admit cross-family or unauthenticated access.
+
+**Accepted limitation — in-use deletion block is client/data-layer enforced.** Requirements 4.9 and 5.10 require blocking deletion of a category/sub-source that is still referenced by an expense and reporting the count. Firestore Security Rules cannot efficiently assert the *absence* of referencing documents in another collection (there is no cross-collection "no document matches this query" predicate, and `get()`-based checks cannot scan a collection), so this guard is enforced in the data layer's `deleteCategory`/`deleteSubSource` (which count referencing expenses before deleting). This is an accepted limitation: a hand-crafted client that bypassed the app could delete a referenced category/sub-source directly, leaving expenses with a dangling `categoryId`/`subSourceId`. The blast radius is contained — the UI already falls back gracefully when a reference does not resolve (`resolveLabels` shows the legacy category string and omits an unresolved sub-source nickname, Req 6.2, 6.3) — and the rule still guarantees the only callers are members of the owning family. Enforcing referential integrity server-side would require Cloud Functions, which is out of scope for this serverless design. Similarly, the rule cannot cheaply assert that an expense `update` leaves `recordedBy`/`createdAt` unchanged (Req 3.15); the data layer enforces this by writing only the editable fields plus `updatedBy`/`updatedAt`.
 
 ## Correctness Properties
 
 *A property is a characteristic or behavior that should hold true across all valid executions of a system — essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
 
-The expansion keeps the MVP's pure-logic core (validation, mapping, sorting, aggregation) and adds new pure logic (invite-code generation, last-4 validation, category-name normalization/uniqueness, sub-source validation, migration mapping). All of this is amenable to property-based testing with fast-check. Properties 1–8 are **retained from the MVP** (with requirement clauses renumbered to this document's requirements); Properties 9–13 are **new** for the expansion.
+The expansion keeps the MVP's pure-logic core (validation, mapping, sorting, aggregation) and adds new pure logic (invite-code generation, last-4 validation, category-name normalization/uniqueness, sub-source validation, migration mapping). All of this is amenable to property-based testing with fast-check. Properties 1–8 are **retained from the MVP** (with requirement clauses renumbered to this document's requirements); Properties 9–13 were added in the first expansion round; Properties 14–15 are **new** for this round (expense edit audit-field preservation and the category/sub-source in-use deletion decision).
 
-Cross-family access isolation (Requirement 9.1–9.3) is intentionally **not** expressed as a property-based test: it is enforced by Firestore Security Rules (external behavior that does not vary meaningfully with input) and is verified with emulator-based rules tests instead (see Testing Strategy).
+Most of this round's new criteria are Firestore I/O (member-profile upserts, expense update/delete, category/sub-source deletion) or authorization rules, which are verified with emulator integration and rules tests rather than property-based tests (see Testing Strategy). Two pieces of pure logic do warrant new properties: the update-field builder's audit-field preservation (Req 3.15) and the in-use reference-count decision shared by category and sub-source deletion (Req 4.8/4.9, 5.9/5.10). Member-name resolution (Req 2.7, 2.9) introduces no new property — it reuses the existing `resolveMemberLabel` rule already covered by Property 1.
+
+Cross-family access isolation (Requirement 9.1–9.5) is intentionally **not** expressed as a property-based test: it is enforced by Firestore Security Rules (external behavior that does not vary meaningfully with input) and is verified with emulator-based rules tests instead (see Testing Strategy).
 
 ### Property 1: Signed-in label resolution
 
@@ -713,9 +898,21 @@ Cross-family access isolation (Requirement 9.1–9.3) is intentionally **not** e
 
 **Validates: Requirements 10.1, 10.2, 10.3, 10.4, 10.5**
 
+### Property 14: Editing an expense preserves recorder and creation time and stamps the editor
+
+*For any* existing Expense and any valid edited ExpenseInput and any editing FamilyMember, the update payload produced by the mapper SHALL carry the edited user-entered fields (amount, categoryId, source, subSourceId when present, date, description), SHALL leave `recordedBy` and `createdAt` unchanged from the original Expense, and SHALL set `updatedBy` equal to the editing member's uid and an `updatedAt` timestamp.
+
+**Validates: Requirements 3.15**
+
+### Property 15: In-use deletion decision counts references and blocks only when referenced
+
+*For any* collection of Expenses, any reference dimension (Category id via `categoryId` or SubSource id via `subSourceId`), and any target id, the in-use decision SHALL report a count equal to the exact number of Expenses in the collection that reference the target id on that dimension, and SHALL permit deletion if and only if that count is zero; when the count is greater than zero the decision SHALL block deletion and surface that count.
+
+**Validates: Requirements 4.8, 4.9, 5.9, 5.10**
+
 ## Error Handling
 
-Errors are classified by source and handled at the layer closest to the cause, surfacing a user-facing message without losing user input or previously loaded data. The expansion adds family, category, sub-source, and migration error paths to the MVP set.
+Errors are classified by source and handled at the layer closest to the cause, surfacing a user-facing message without losing user input or previously loaded data. The expansion adds family, member-profile, category, sub-source, expense edit/delete, and migration error paths to the MVP set.
 
 ### Authentication errors
 
@@ -736,18 +933,28 @@ The state layer distinguishes "cancel" (no error UI) from "failure" (error UI) b
 | Invite code does not match any family | `joinFamily` rejects with `InvalidInviteCode`; `CreateJoinFamily` shows an "invalid code" message and joins nothing | 2.4 |
 | Invite-code collision at family creation | `createFamily` retries code generation a bounded number of times inside the transaction; the create succeeds with a unique code or surfaces a creation error | 2.2 |
 | Family resolution read fails | `useFamily` exposes `status: 'error'`; the UI shows a load error and offers retry | 9.1 |
+| Member-profile upsert fails on resolution | The upsert is best-effort and non-blocking: a failure is logged and family resolution still completes; the member list falls back to uid labels for any member without a profile. The upsert retries on the next sign-in/resolution (Req 2.8) | 2.7, 2.8, 2.9 |
 
 Joining is performed as a transaction: the `inviteCodes/{code}` index document is read by id to resolve `familyId`, then `users/{uid}.familyId` is set and the caller's uid is appended to `families/{familyId}.memberUids`. A non-existent code yields no index document and is reported as invalid (Req 2.4).
 
 ### Category and sub-source errors
 
 - Category add validation is performed by `validateNewCategory` before any write: empty/whitespace-only names show a "name required" message (Req 4.4) and case-insensitive duplicates show an "already exists" message (Req 4.5); no document is written in either case.
-- Sub-source add validation is performed by `validateSubSource`/`validateLast4` before any write: a missing nickname shows a "nickname required" message (Req 5.3) and a last-4 value that is not exactly four digits shows a "must be exactly 4 digits" message (Req 5.5); no document is written. The security rule independently allowlists fields so a full card number can never be stored (Req 5.6, 9.5).
+- Sub-source add validation is performed by `validateSubSource`/`validateLast4` before any write: a missing nickname shows a "nickname required" message (Req 5.3) and a last-4 value that is not exactly four digits shows a "must be exactly 4 digits" message (Req 5.5); no document is written. The security rule independently allowlists fields so a full card number can never be stored (Req 5.6, 9.7).
+- Category delete is gated by the data layer's reference count (Req 4.8, 4.9): when the count is greater than zero, `deleteCategory` returns `err({ kind: 'in-use', count })`, the manager shows "In use by N expense(s)", and the category remains. A zero count deletes the category and the live subscription removes it.
+- Sub-source delete is gated the same way (Req 5.9, 5.10): a non-zero count yields `err({ kind: 'in-use', count })` and an "In use by N expense(s)" message; a zero count deletes it. A delete whose count query or delete write fails surfaces a generic "could not delete" message and leaves the item in place.
 
 ### Expense write errors
 
 - On `addExpense` rejection or no completion within 10 seconds, `ExpenseEntryForm` shows a save-failed error and **retains all entered field values** so the member can retry (Req 3.12). The 10-second ceiling is enforced with a timeout wrapper around the repository call.
 - Validation failures are handled before any write: per-field messages are shown and no write is attempted (Req 3.4, 3.5, 3.6, 3.10).
+
+### Expense edit and delete errors
+
+- Edit validation reuses the same validators as creation, so an invalid edit shows per-field messages and performs no update (Req 3.16); the edit form retains the entered values exactly like the create flow.
+- On `updateExpense` rejection, the edit modal shows a save-failed message and keeps the form open with entered values so the member can retry. A successful update closes the modal; the live subscription reflects the change (Req 3.14, 6.5).
+- On `deleteExpense` rejection, the row shows a "could not delete" message and remains; a successful delete removes the row via the live subscription (Req 3.18). Deletion is preceded by a confirmation prompt (Req 3.17), so an accidental activation does not write.
+- Edit and delete are permitted for any member of the family regardless of who recorded the expense (Req 3.19); a non-member's attempt is denied by the security rules (Req 9.5) and surfaces as a permission error.
 
 ### Expense read errors
 
@@ -765,7 +972,7 @@ Joining is performed as a transaction: the `inviteCodes/{code}` index document i
 
 ### Security / access errors
 
-- Firestore permission-denied responses are enforced by Security Rules for non-members and unauthenticated callers (Req 9.1, 9.2, 9.3). The client treats permission-denied on read as a load error, clears in-memory family data on Session termination within 1 second (Req 9.4), and routes unauthenticated users to sign-in.
+- Firestore permission-denied responses are enforced by Security Rules for non-members and unauthenticated callers on reads and on create/update/delete (Req 9.1, 9.2, 9.3, 9.5). The client treats permission-denied on read as a load error, clears in-memory family data on Session termination within 1 second (Req 9.6), and routes unauthenticated users to sign-in.
 
 ### Deployment errors
 
@@ -784,7 +991,7 @@ The expansion keeps the MVP's layered testing approach. Pure domain logic is cov
 
 ### Property-based tests
 
-- Each correctness property (1–13) is implemented as a **single** property-based test.
+- Each correctness property (1–15) is implemented as a **single** property-based test.
 - Each property test runs a **minimum of 100 iterations**.
 - Each property test is tagged with a comment referencing its design property in the format:
   `// Feature: family-expense-tracker-pwa, Property {number}: {property_text}`
@@ -795,17 +1002,20 @@ The expansion keeps the MVP's layered testing approach. Pure domain logic is cov
   - **Sub-sources (Property 11):** arbitrary `source` (from the fixed `Source` enum), nicknames (including empty/whitespace), and last-4 inputs; assertions on accept/reject and on the validated output containing only `{source, nickname, last4?}`.
   - **Category names (Property 12):** an arbitrary list of existing category names plus a candidate name produced by case/whitespace mutations of existing names (to stress case-insensitive uniqueness) and fresh names.
   - **Migration (Property 13):** arbitrary legacy-expense sets (with category/source strings drawn from both known and novel values), arbitrary existing-category sets, and arbitrary already-migrated id sets; assertions on field preservation, category-id assignment + `categoriesToCreate` completeness, `failures` keying, and idempotence over the migrated-id set.
+  - **Expense edit audit fields (Property 14):** an arbitrary existing `Expense` (with arbitrary `recordedBy`/`createdAt`), an arbitrary valid edited `ExpenseInput`, and an arbitrary editing member; assert the update payload carries the edited fields, leaves `recordedBy`/`createdAt` equal to the original, and sets `updatedBy` to the editor's uid plus an `updatedAt`.
+  - **In-use deletion decision (Property 15):** an arbitrary list of expenses with arbitrary `categoryId`/`subSourceId` references, an arbitrary reference dimension, and an arbitrary target id (including ids that match zero, some, or all expenses); assert the reported count equals the number of referencing expenses and that "deletable" is exactly `count === 0`.
 
 ### Unit tests (examples and edge cases)
 
 - Sign-in screen renders the Google option; sign-in click invokes the auth service (1.1, 1.2).
 - Auth failure, cancel, timeout, idle-timeout behaviors with mocked auth service and **fake timers** (1.4, 1.8, 1.9, 1.10).
-- Route guards: `RequireAuth` redirects unauthenticated access (1.7); `RequireFamily` routes a family-less member to `/family` (1.11, 2.7); state cleared on Session termination within 1s (9.4).
+- Route guards: `RequireAuth` redirects unauthenticated access (1.7); `RequireFamily` routes a family-less member to `/family` (1.11, 2.7); state cleared on Session termination within 1s (9.6).
 - `CreateJoinFamily` renders create + join affordances for a family-less member (2.1); invalid invite code shows the invalid message and joins nothing (2.4).
-- `FamilySettings` renders the member list and the family's invite code (2.6).
-- `CategoryManager`: missing-name and duplicate-name submissions are rejected with messages (4.4, 4.5); the entry form's category select offers the family's categories (4.6).
-- `SubSourceManager`: missing-nickname and bad-last-4 submissions rejected (5.3, 5.5); a source with no sub-sources lets an expense be recorded without one (5.7).
+- `FamilySettings` renders the member list and the family's invite code (2.6); member rows show `resolveMemberLabel(profile)` — a profile name when present, the email when only an email is stored, and the uid when neither is stored (2.9).
+- `CategoryManager`: missing-name and duplicate-name submissions are rejected with messages (4.4, 4.5); the entry form's category select offers the family's categories (4.6); each category row has a delete control (4.7) and a blocked delete shows "In use by N expense(s)" (4.9).
+- `SubSourceManager`: missing-nickname and bad-last-4 submissions rejected (5.3, 5.5); a source with no sub-sources lets an expense be recorded without one (5.7); each sub-source row has a delete control (5.8) and a blocked delete shows "In use by N expense(s)" (5.10).
 - Expense entry: missing-category, category-not-in-family, and missing-source submissions are rejected (3.5, 3.6); success confirmation + form clear (3.11); save-failure retains values (3.12); the optional sub-source select appears only when the chosen source has sub-sources (3.7).
+- Expense edit: each list row exposes an Edit affordance that opens the entry form pre-populated from the expense (3.13); an invalid edit shows per-field messages and writes nothing (3.16); a valid edit calls `updateExpense` and closes the modal (3.14). Each row exposes a Delete affordance that prompts for confirmation (3.17) and, when confirmed, calls `deleteExpense` (3.18).
 - List empty state, loading indicator, read-error + retry (6.6, 6.7, 6.8, 6.9); a row shows the sub-source nickname when present (6.2).
 - Dashboard empty state and read-error + retry (7.6, 7.7).
 - Install affordance on `beforeinstallprompt`; SW-registration-failure fallback message (8.4, 8.3).
@@ -813,6 +1023,9 @@ The expansion keeps the MVP's layered testing approach. Pure domain logic is cov
 ### Integration tests (Firestore emulator)
 
 - Family-scoped repositories: `expenseRepository`, `categoryRepository`, and `subSourceRepository` read/write only under `families/{familyId}/...` and reflect new snapshots live (3.1, 3.7, 4.2, 6.1, 6.5, 7.5).
+- Member profiles: creating/joining a family writes the caller's `families/{familyId}/members/{uid}` profile (2.7); resolving a family for a member with no profile backfills one and a subsequent resolution updates `updatedAt` without duplicating (2.8); `listMembers` returns profile-backed `displayName`/`email` and falls back to a null-identity member when a profile is missing (2.9).
+- Expense update/delete: `updateExpense` writes the edited fields and `updatedBy`/`updatedAt` while leaving `recordedBy`/`createdAt` unchanged (3.14, 3.15); `deleteExpense` removes the document (3.18); both reflect live via the subscription.
+- Category/sub-source delete with in-use block: `deleteCategory`/`deleteSubSource` remove the item when no expense references it (4.8, 5.9) and return `err({ kind: 'in-use', count })` with the correct count without deleting when one or more expenses reference it (4.9, 5.10); the reference count is computed against the family's expenses.
 - `createFamily` writes the family document, the creator's `users/{uid}.familyId`, the `inviteCodes/{code}` index, and the seeded default categories; collision on the index id triggers a bounded retry (2.2, 4.1).
 - `joinFamilyByInviteCode` resolves a known code via the index, appends the caller to `memberUids`, and sets the routing doc; a non-existent code is reported invalid (2.3, 2.4).
 - One-time migration: first-family creation migrates legacy top-level expenses into `families/{id}/expenses`, creating categories from distinct strings and preserving fields; re-running is a no-op; an unmappable expense is left in place and reported (10.1–10.5).
@@ -821,13 +1034,16 @@ The expansion keeps the MVP's layered testing approach. Pure domain logic is cov
 
 ### Security rules tests (emulator)
 
-These are the primary verification for Requirement 9's cross-family isolation, which is deliberately not a property-based test:
+These are the primary verification for Requirement 9's cross-family isolation and the relaxed member-mutation rules, which are deliberately not property-based tests:
 
-- A member of family A **cannot** read or write family B's `expenses`, `categories`, or `subSources`; a member of A **can** read/write A's records (9.1, 9.2, 9.3).
+- A member of family A **cannot** read or write family B's `expenses`, `categories`, `subSources`, or `members`; a member of A **can** read/write A's records (9.1, 9.2, 9.3).
 - Unauthenticated read/write of any family subcollection is denied (9.1, 9.2).
+- A member who did **not** record an expense **can** update and delete it within their own family (3.19, 9.4); a member of another family **cannot** update or delete it (9.5).
+- A member **can** delete a category and a sub-source in their own family; a non-member **cannot** (9.4, 9.5). (The in-use block of Req 4.9/5.10 is enforced in the data layer, not in rules — see the accepted limitation in Data Models.)
+- Member profiles: any member of a family **can** read every `members/{uid}` profile in that family (2.6, 2.9) but **can** write only their own (`request.auth.uid == uid`) and **cannot** write another member's profile or a profile in another family (2.7, 2.8).
 - `users/{uid}` is readable/writable only by that uid; `inviteCodes/{code}` allows get-by-id but denies `list` (least-privilege lookup).
-- A `subSources` create with an extra field, or with a `last4` that is not exactly four digits, is denied — structurally guaranteeing no full card number is stored (5.6, 9.5).
-- Expense `update`/`delete` are denied for everyone (editing/deleting is out of scope); category and sub-source `update`/`delete` are denied (only adding is in scope).
+- A `subSources` create with an extra field, or with a `last4` that is not exactly four digits, is denied — structurally guaranteeing no full card number is stored (5.6, 9.7).
+- Category and sub-source `update` are denied for everyone (editing them is out of scope); only `create` and `delete` are permitted to members.
 
 ### Smoke / configuration checks
 

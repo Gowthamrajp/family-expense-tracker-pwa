@@ -12,6 +12,7 @@ import type {
   Expense,
   ExpenseDocument,
   ExpenseInput,
+  ExpenseUpdateDocument,
   FamilyCategory,
   FamilyMember,
   FirestoreTimestamp,
@@ -115,12 +116,54 @@ export function toFirestore(
 }
 
 /**
+ * Map an edited {@link ExpenseInput} onto an {@link ExpenseUpdateDocument} for
+ * persisting an expense edit. Carries the edited user fields (amount,
+ * categoryId, source, optional subSourceId, date, description) and stamps the
+ * audit fields `updatedBy` (the editing member's uid) and `updatedAt`.
+ *
+ * It intentionally does NOT write `recordedBy` or `createdAt`, so the original
+ * recorder identity and creation time are preserved unchanged when the data
+ * layer merges this payload onto the stored document (Req 3.15).
+ *
+ * @param input - The re-validated edited fields.
+ * @param member - The authenticated editor.
+ * @param updatedAt - Edit time; defaults to now so callers may inject a
+ *   deterministic value (the data layer may instead use a server timestamp),
+ *   consistent with how {@link toFirestore} handles `createdAt`.
+ *
+ * Validates: Requirements 3.15, 6.2
+ */
+export function toUpdateFields(
+  input: ExpenseInput,
+  member: FamilyMember,
+  updatedAt: Date = new Date(),
+): ExpenseUpdateDocument {
+  const doc: ExpenseUpdateDocument = {
+    amount: input.amount,
+    categoryId: input.categoryId ?? input.category,
+    source: input.source,
+    date: dateToTimestamp(input.date),
+    description: input.description,
+    updatedBy: member.uid,
+    updatedAt: dateToTimestamp(updatedAt),
+  };
+
+  if (input.subSourceId !== undefined) {
+    doc.subSourceId = input.subSourceId;
+  }
+
+  return doc;
+}
+
+/**
  * Reconstruct a full {@link Expense} from a Firestore document and its id,
  * converting stored timestamps back to {@link Date} values. Reads the optional
  * family-scoped `categoryId`/`subSourceId` references and the denormalized
- * `recordedByName` in addition to the legacy fields.
+ * `recordedByName` in addition to the legacy fields, and the optional
+ * `updatedBy`/`updatedAt` audit fields written when an expense is edited so an
+ * edited expense round-trips its audit metadata (Req 3.15, 6.2).
  *
- * Validates: Requirements 2.3, 6.2
+ * Validates: Requirements 2.3, 3.15, 6.2
  */
 export function fromFirestore(id: string, doc: ExpenseDocument): Expense {
   const expense: Expense = {
@@ -142,6 +185,12 @@ export function fromFirestore(id: string, doc: ExpenseDocument): Expense {
   }
   if (doc.recordedByName !== undefined) {
     expense.recordedByName = doc.recordedByName;
+  }
+  if (doc.updatedBy !== undefined) {
+    expense.updatedBy = doc.updatedBy;
+  }
+  if (doc.updatedAt !== undefined) {
+    expense.updatedAt = timestampToDate(doc.updatedAt);
   }
 
   return expense;

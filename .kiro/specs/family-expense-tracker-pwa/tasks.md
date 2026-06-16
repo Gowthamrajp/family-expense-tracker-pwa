@@ -391,3 +391,119 @@ design Properties 9–13 with fast-check (minimum 100 iterations, tagged
   ]
 }
 ```
+
+## Expansion Plan: Member Profiles, Expense Edit/Delete, and In-Use-Protected Deletes
+
+This section appends to the completed plans above (tasks 1–33) to implement the
+second expansion round defined in the updated requirements and design: per-family
+Member_Profiles for readable member names (Req 2.7–2.9), member-performed expense
+edit and delete preserving the original recorder/creation time (Req 3.13–3.19),
+category and sub-source deletion blocked when still referenced by an expense
+(Req 4.7–4.9, 5.8–5.10), and the relaxed-but-still-family-scoped security rules
+(Req 9.4–9.7). Property test sub-tasks (`*`) cover new design Properties 14–15 with
+fast-check (minimum 100 iterations, tagged
+`// Feature: family-expense-tracker-pwa, Property {number}: {property_text}`). The
+`firestore.rules` file has already been revised by the design step; task 42 covers
+deploying and verifying it.
+
+- [x] 34. Expand the domain type model for member profiles and expense edits
+  - Update `src/domain/types.ts`: add `MemberProfile` (`uid`, `displayName`, `email`, `joinedAt`, `updatedAt`) and `MemberProfileDocument` (`displayName`, `email`, `joinedAt`, `updatedAt`); add `ExpenseUpdateDocument` (editable fields plus `updatedBy`/`updatedAt`, intentionally omitting `recordedBy`/`createdAt`); add optional `updatedBy?`/`updatedAt?` to `Expense` and `ExpenseDocument`; add the `InUseError` discriminated type (`{ kind: 'in-use'; count: number }`)
+  - _Requirements: 2.7, 3.15, 4.9, 5.10_
+
+- [x] 35. Revise expense mapping for edit audit fields
+  - [x] 35.1 Add edit-mapping to `src/domain/expenseMapper.ts`
+    - Implement `toUpdateFields(input, member)` producing an `ExpenseUpdateDocument` that carries the edited user fields, sets `updatedBy` to the editor's uid and `updatedAt`, and does NOT write `recordedBy`/`createdAt`; extend `fromFirestore` to read the optional `updatedBy`/`updatedAt` when present
+    - _Requirements: 3.15, 6.2_
+  - [ ]* 35.2 Write property test for expense edit audit-field preservation
+    - **Property 14: Editing an expense preserves recorder and creation time and stamps the editor**
+    - **Validates: Requirements 3.15**
+    - Arbitrary existing `Expense` (arbitrary `recordedBy`/`createdAt`), arbitrary valid edited `ExpenseInput`, and arbitrary editing member; assert the payload carries the edited fields, leaves `recordedBy`/`createdAt` equal to the original, and sets `updatedBy`/`updatedAt`; min 100 iterations; tag with the design property comment
+
+- [x] 36. Implement the in-use deletion decision domain logic
+  - [x] 36.1 Implement a pure in-use decision helper in `src/domain`
+    - Implement a helper that, given a collection of Expenses, a reference dimension (`categoryId` or `subSourceId`), and a target id, returns the exact count of referencing Expenses and a `deletable` flag that is true if and only if the count is zero (the shared decision used by category and sub-source deletion)
+    - _Requirements: 4.8, 4.9, 5.9, 5.10_
+  - [ ]* 36.2 Write property test for the in-use deletion decision
+    - **Property 15: In-use deletion decision counts references and blocks only when referenced**
+    - **Validates: Requirements 4.8, 4.9, 5.9, 5.10**
+    - Arbitrary expense lists with arbitrary `categoryId`/`subSourceId` references, arbitrary dimension, and target ids matching zero/some/all expenses; assert the reported count equals the number of referencing expenses and `deletable === (count === 0)`; min 100 iterations; tag with the design property comment
+
+- [x] 37. Implement member-profile and edit/delete data layer
+  - [x] 37.1 Add member-profile reads/writes to `src/data/familyRepository.ts`
+    - Implement `upsertMemberProfile(familyId, member)` writing only the caller's own `families/{familyId}/members/{uid}` document (`displayName`, `email`, `joinedAt` on first write, `updatedAt` via `serverTimestamp` on each upsert); revise `listMembers` to read the `families/{familyId}/members` subcollection and return `FamilyMember` objects carrying real `displayName`/`email`, falling back to a null-identity member (so the row remains) when a profile is missing for a uid in `memberUids`
+    - _Requirements: 2.7, 2.8, 2.9_
+  - [x] 37.2 Add `updateExpense`/`deleteExpense` to `src/data/expenseRepository.ts`
+    - Implement `updateExpense(familyId, expenseId, input, member)` using `toUpdateFields` (writes editable fields plus `updatedBy`/`updatedAt` via `serverTimestamp`, leaving `recordedBy`/`createdAt` untouched) and `deleteExpense(familyId, expenseId)`; perform no recorder check so any member may edit/delete any expense in the family
+    - _Requirements: 3.14, 3.15, 3.18, 3.19_
+  - [x] 37.3 Add `deleteCategory` with in-use protection to `src/data/categoryRepository.ts`
+    - Implement `deleteCategory(familyId, categoryId)` that counts referencing expenses (`families/{familyId}/expenses where categoryId == categoryId`) using `getCountFromServer` with a bounded `getDocs` fallback; when the count is > 0 return `err({ kind: 'in-use', count })` and perform no delete, otherwise delete the document and return `ok(undefined)`
+    - _Requirements: 4.7, 4.8, 4.9_
+  - [x] 37.4 Add `deleteSubSource` with in-use protection to `src/data/subSourceRepository.ts`
+    - Implement `deleteSubSource(familyId, subSourceId)` using the same in-use pattern on `subSourceId` (`getCountFromServer` with `getDocs` fallback); return `err({ kind: 'in-use', count })` without deleting when count > 0, else delete and return `ok(undefined)`
+    - _Requirements: 5.8, 5.9, 5.10_
+  - [ ]* 37.5 Write Firestore emulator integration tests for the round-2 data layer
+    - Profile upsert on create/join and backfill on resolution (no duplicate, `updatedAt` refreshed); `listMembers` returns profile-backed names with null-identity fallback; `updateExpense` preserves `recordedBy`/`createdAt` and stamps `updatedBy`/`updatedAt`; `deleteExpense` removes the doc; `deleteCategory`/`deleteSubSource` delete at zero references and return `err` with the correct count when referenced
+    - _Requirements: 2.7, 2.8, 2.9, 3.14, 3.15, 3.18, 4.8, 4.9, 5.9, 5.10_
+
+- [x] 38. Wire member profiles and edit/delete actions into the state layer
+  - [x] 38.1 Upsert the current member profile in `FamilyProvider`
+    - After family resolution succeeds, call `familyRepository.upsertMemberProfile(family.id, member)` best-effort and non-blocking (a failure is logged and resolution still completes), then populate `members` from the profile-backed `listMembers`
+    - _Requirements: 2.7, 2.8, 2.9_
+  - [x] 38.2 Add `updateExpense`/`deleteExpense` to `useExpenses`
+    - Expose `updateExpense(expenseId, input)` and `deleteExpense(expenseId)` delegating to the family-scoped `ExpenseRepository` with the active `familyId` and the current `member` (from `useAuth`); rely on the live subscription to reflect the result
+    - _Requirements: 3.14, 3.15, 3.18, 3.19_
+  - [x] 38.3 Add `deleteCategory` to `useCategories`
+    - Expose `deleteCategory(categoryId)` returning `Result<void, InUseError>` by delegating to `categoryRepository.deleteCategory`
+    - _Requirements: 4.7, 4.8, 4.9_
+  - [x] 38.4 Add `deleteSubSource` to `useSubSources`
+    - Expose `deleteSubSource(subSourceId)` returning `Result<void, InUseError>` by delegating to `subSourceRepository.deleteSubSource`
+    - _Requirements: 5.8, 5.9, 5.10_
+
+- [x] 39. Checkpoint - round-2 data and state layers
+  - Ensure build/typecheck and any added tests pass, ask the user if questions arise.
+
+- [x] 40. Implement expense edit and delete UI
+  - [x] 40.1 Add edit mode to `src/ui/ExpenseEntryForm.tsx`
+    - Add optional `existingExpense?: Expense` and `onSaved?: () => void` props; when `existingExpense` is present, initialize the controlled form state from its stored amount, `categoryId`, source, `subSourceId`, date, and description and submit via `updateExpense(existingExpense.id, input)` instead of `addExpense`; keep validation identical so an invalid edit shows per-field messages and writes nothing; call `onSaved` after a successful create or update
+    - _Requirements: 3.13, 3.14, 3.16_
+  - [x] 40.2 Add per-row Edit/Delete affordances to `src/ui/ExpenseList.tsx`
+    - Add an Edit control that mounts `ExpenseEntryForm` in edit mode (modal/overlay) and closes via `onSaved` on success, and a Delete control that opens a confirmation prompt and calls `deleteExpense(expenseId)` on confirm; expose both on every row regardless of who recorded the expense (live subscription reflects the change)
+    - _Requirements: 3.13, 3.17, 3.18, 3.19_
+  - [ ]* 40.3 Write unit tests for expense edit/delete UI
+    - Test that an Edit affordance opens the form pre-populated from the expense (3.13), an invalid edit shows per-field messages and writes nothing (3.16), a valid edit calls `updateExpense` and closes the modal (3.14), and a Delete affordance prompts for confirmation (3.17) then calls `deleteExpense` (3.18)
+    - _Requirements: 3.13, 3.14, 3.16, 3.17, 3.18_
+
+- [x] 41. Implement in-use-protected delete UI and profile-backed member list
+  - [x] 41.1 Add a delete control to `src/ui/CategoryManager.tsx`
+    - Render a trash (delete) control on each category with a confirmation prompt; call `deleteCategory(id)` and, on an `err({ kind: 'in-use', count })` result, surface an inline "In use by N expense(s)" message and leave the item in place; on `ok`, the live subscription removes it
+    - _Requirements: 4.7, 4.8, 4.9_
+  - [x] 41.2 Add a delete control to `src/ui/SubSourceManager.tsx`
+    - Render a trash (delete) control on each sub-source with a confirmation prompt; call `deleteSubSource(id)` and, on an `err({ kind: 'in-use', count })` result, surface an inline "In use by N expense(s)" message and leave the item in place; on `ok`, the live subscription removes it
+    - _Requirements: 5.8, 5.9, 5.10_
+  - [x] 41.3 Render the profile-backed member list in `src/ui/FamilySettings.tsx`
+    - Render each member of the family using `resolveMemberLabel(profile)` over the profile-backed member list (display name when present, falling back to email, falling back to a member identifier when neither is stored)
+    - _Requirements: 2.6, 2.9_
+  - [ ]* 41.4 Write unit tests for delete UI and member list
+    - Test that a blocked category/sub-source delete shows "In use by N expense(s)" and the item remains (4.9, 5.10), and that member rows show the resolved profile label with name → email → identifier fallback (2.9)
+    - _Requirements: 4.9, 5.10, 2.9_
+
+- [-] 42. Final checkpoint - build, test, deploy, and verify round-2
+  - Run build, typecheck, and the full test suite; deploy the revised Firestore rules (`firebase deploy --only firestore:rules`) and Hosting (`firebase deploy --only hosting`); verify the member list shows readable names, that editing an expense preserves the original recorder and creation time while stamping `updatedBy`/`updatedAt`, that deleting an in-use category/sub-source is blocked with the "In use by N expense(s)" count while an unreferenced one deletes, that any member can edit/delete any expense in their family, and that cross-family isolation is preserved.
+  - _Requirements: 2.9, 3.15, 4.9, 5.10, 9.4, 9.5, 9.6, 9.7, 11.2_
+
+## Round-2 Expansion Task Dependency Graph
+
+```json
+{
+  "waves": [
+    { "id": 0, "tasks": ["34"] },
+    { "id": 1, "tasks": ["35.1", "36.1", "37.1"] },
+    { "id": 2, "tasks": ["35.2", "36.2", "37.2", "37.3", "37.4"] },
+    { "id": 3, "tasks": ["37.5", "38.1", "38.2", "38.3", "38.4"] },
+    { "id": 4, "tasks": ["39", "40.1", "41.1", "41.2", "41.3"] },
+    { "id": 5, "tasks": ["40.2", "41.4"] },
+    { "id": 6, "tasks": ["40.3"] },
+    { "id": 7, "tasks": ["42"] }
+  ]
+}
+```

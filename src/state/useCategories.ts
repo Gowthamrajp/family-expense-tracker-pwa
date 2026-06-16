@@ -28,7 +28,7 @@ import {
   validateNewCategory,
   type CategoryError,
 } from '../domain/category';
-import type { FamilyCategory, Result } from '../domain/types';
+import type { FamilyCategory, InUseError, Result } from '../domain/types';
 import { err, ok } from '../domain/types';
 
 /** Lifecycle status of the categories subscription. */
@@ -51,6 +51,16 @@ export interface UseCategoriesResult {
    * (Req 4.5), or no family is active. Invalid names are never written.
    */
   addCategory(name: string): Promise<Result<FamilyCategory, CategoryError>>;
+  /**
+   * Delete a category. Delegates to
+   * {@link categoryRepository.deleteCategory}, which removes the category only
+   * when no Expense in the family references it (Req 4.8). When one or more
+   * expenses still reference it, resolves to an `err` Result carrying an
+   * {@link InUseError} with the referencing count and performs no delete
+   * (Req 4.9). The live subscription removes the item from `categories` on
+   * success (Req 4.7).
+   */
+  deleteCategory(categoryId: string): Promise<Result<void, InUseError>>;
 }
 
 /**
@@ -129,5 +139,22 @@ export function useCategories(familyId: string | null): UseCategoriesResult {
     [familyId],
   );
 
-  return { categories, status, addCategory };
+  const deleteCategory = useCallback(
+    async (categoryId: string): Promise<Result<void, InUseError>> => {
+      if (familyId === null) {
+        // No active family: nothing is displayed to delete. Treat as a no-op
+        // success so callers do not need to special-case the idle state.
+        return ok(undefined);
+      }
+
+      // Delegate to the repository, which counts referencing expenses and
+      // blocks the delete when the category is still in use (Req 4.8, 4.9).
+      // On success the live subscription removes the item from `categories`
+      // (Req 4.7).
+      return categoryRepository.deleteCategory(familyId, categoryId);
+    },
+    [familyId],
+  );
+
+  return { categories, status, addCategory, deleteCategory };
 }

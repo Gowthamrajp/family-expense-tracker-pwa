@@ -10,11 +10,11 @@
  *
  * 1. Family — displays the family's shareable invite code prominently with a
  *    copy-to-clipboard control (using `navigator.clipboard` when available),
- *    and lists the family's members (Req 2.6). Member labels are resolved with
- *    {@link resolveMemberLabel}; because the repository currently cannot
- *    hydrate `displayName`/`email` for other members, that helper falls back to
- *    the literal "Signed in", so this screen additionally falls back to the
- *    member uid to keep rows distinguishable.
+ *    and lists the family's members (Req 2.6). `listMembers` now returns
+ *    profile-backed members carrying each member's real `displayName`/`email`,
+ *    so member labels are resolved directly with {@link resolveMemberLabel}
+ *    (display name → email → fallback); the screen only falls back to the
+ *    member uid when neither a name nor an email is stored (Req 2.9).
  * 2. {@link CategoryManager} — lists the family's categories and adds new ones
  *    with empty/duplicate validation (Req 4.2, 4.3, 4.4, 4.5).
  * 3. {@link SubSourceManager} — adds a sub-source under a chosen {@link Source}
@@ -34,6 +34,15 @@ const CATEGORY_REQUIRED_MESSAGE = 'Enter a category name.';
 const CATEGORY_DUPLICATE_MESSAGE = 'That category already exists.';
 const SUBSOURCE_NICKNAME_REQUIRED_MESSAGE = 'Enter a nickname.';
 const SUBSOURCE_INVALID_LAST4_MESSAGE = 'Last 4 digits must be exactly 4 digits.';
+
+/**
+ * Build the in-use message shown when a category/sub-source delete is blocked
+ * because Expenses still reference it, pluralizing "expense" correctly
+ * (Req 4.9, 5.10).
+ */
+function inUseMessage(count: number): string {
+  return `In use by ${count} expense${count === 1 ? '' : 's'}.`;
+}
 
 /** Shared classes for ghost form controls. */
 const CONTROL_CLASS = 'ghost-input px-3 py-2.5 text-body-md';
@@ -165,10 +174,15 @@ function FamilySection({ inviteCode, members }: FamilySectionProps): JSX.Element
         ) : (
           <ul className="flex flex-col gap-2">
             {members.map((member) => {
-              const label = resolveMemberLabel(member);
-              // The repository can't currently hydrate names/emails for other
-              // members, so fall back to the uid to keep rows distinguishable.
-              const display = label === 'Signed in' ? member.uid : label;
+              // listMembers now returns profile-backed members with real
+              // displayName/email, so resolve the label directly (Req 2.9).
+              // Only fall back to the uid when neither a name nor an email is
+              // stored (resolveMemberLabel returns "Signed in" in that case).
+              const hasIdentity =
+                member.displayName !== null || member.email !== null;
+              const display = hasIdentity
+                ? resolveMemberLabel(member)
+                : member.uid;
               return (
                 <li
                   key={member.uid}
@@ -203,12 +217,18 @@ interface CategoryManagerProps {
  * shows a brief confirmation (Req 4.3).
  */
 export function CategoryManager({ familyId }: CategoryManagerProps): JSX.Element {
-  const { categories, status, addCategory } = useCategories(familyId);
+  const { categories, status, addCategory, deleteCategory } = useCategories(familyId);
 
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
+  // Id of the category awaiting delete confirmation (inline confirm state).
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  // Id of the category whose delete is in flight.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Per-category in-use message keyed by category id (Req 4.9).
+  const [inUseById, setInUseById] = useState<Record<string, string>>({});
 
   const handleAdd = async () => {
     if (isAdding) {
@@ -231,6 +251,35 @@ export function CategoryManager({ familyId }: CategoryManagerProps): JSX.Element
       }
     } finally {
       setIsAdding(false);
+    }
+  };
+
+  const handleDelete = async (categoryId: string) => {
+    if (deletingId !== null) {
+      return;
+    }
+    setConfirmingId(null);
+    setDeletingId(categoryId);
+    // Clear any stale in-use message for this item before re-checking.
+    setInUseById((prev) => {
+      const next = { ...prev };
+      delete next[categoryId];
+      return next;
+    });
+    try {
+      const result = await deleteCategory(categoryId);
+      if (!result.ok) {
+        // Blocked: still referenced by expenses. Surface the count inline and
+        // leave the item in place (Req 4.9).
+        setInUseById((prev) => ({
+          ...prev,
+          [categoryId]: inUseMessage(result.error.count),
+        }));
+      }
+      // On success the live subscription removes the item (Req 4.7); nothing
+      // further to do here.
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -257,15 +306,67 @@ export function CategoryManager({ familyId }: CategoryManagerProps): JSX.Element
           {categories.length === 0 ? (
             <p className="text-on-surface-variant">No categories yet.</p>
           ) : (
-            <ul className="flex flex-wrap gap-2">
-              {categories.map((category) => (
-                <li
-                  key={category.id}
-                  className="px-3 py-1.5 rounded-full text-sm text-on-surface bg-surface-container-high/40 border border-outline-variant/20"
-                >
-                  {category.name}
-                </li>
-              ))}
+            <ul className="flex flex-col gap-2">
+              {categories.map((category) => {
+                const inUse = inUseById[category.id];
+                const isConfirming = confirmingId === category.id;
+                const isDeleting = deletingId === category.id;
+                return (
+                  <li
+                    key={category.id}
+                    className="flex flex-col gap-1.5 px-3 py-2 rounded-lg text-sm text-on-surface bg-surface-container-high/40 border border-outline-variant/20"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex-1 truncate">{category.name}</span>
+                      {isConfirming ? (
+                        <span className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleDelete(category.id)}
+                            disabled={isDeleting}
+                            aria-busy={isDeleting}
+                            className="btn-ghost px-2.5 py-1 text-xs text-error"
+                          >
+                            {isDeleting ? 'Deleting…' : 'Confirm'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmingId(null)}
+                            disabled={isDeleting}
+                            className="btn-ghost px-2.5 py-1 text-xs"
+                          >
+                            Cancel
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInUseById((prev) => {
+                              const next = { ...prev };
+                              delete next[category.id];
+                              return next;
+                            });
+                            setConfirmingId(category.id);
+                          }}
+                          disabled={deletingId !== null}
+                          aria-label={`Delete category ${category.name}`}
+                          className="btn-ghost p-1.5 text-on-surface-variant hover:text-error"
+                        >
+                          <span className="material-symbols-outlined text-lg" aria-hidden="true">
+                            delete
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                    {inUse && (
+                      <p role="alert" className="text-error text-xs">
+                        {inUse}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </>
@@ -330,7 +431,7 @@ interface SubSourceManagerProps {
  * grouped by source. Full card numbers are never stored (Req 5.6).
  */
 export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Element {
-  const { status, addSubSource, forSource } = useSubSources(familyId);
+  const { status, addSubSource, forSource, deleteSubSource } = useSubSources(familyId);
 
   const [source, setSource] = useState<Source>(SOURCES[0]);
   const [nickname, setNickname] = useState('');
@@ -338,6 +439,12 @@ export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Eleme
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
+  // Id of the sub-source awaiting delete confirmation (inline confirm state).
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  // Id of the sub-source whose delete is in flight.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Per-sub-source in-use message keyed by sub-source id (Req 5.10).
+  const [inUseById, setInUseById] = useState<Record<string, string>>({});
 
   const handleAdd = async () => {
     if (isAdding) {
@@ -365,6 +472,34 @@ export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Eleme
       }
     } finally {
       setIsAdding(false);
+    }
+  };
+
+  const handleDelete = async (subSourceId: string) => {
+    if (deletingId !== null) {
+      return;
+    }
+    setConfirmingId(null);
+    setDeletingId(subSourceId);
+    // Clear any stale in-use message for this item before re-checking.
+    setInUseById((prev) => {
+      const next = { ...prev };
+      delete next[subSourceId];
+      return next;
+    });
+    try {
+      const result = await deleteSubSource(subSourceId);
+      if (!result.ok) {
+        // Blocked: still referenced by expenses. Surface the count inline and
+        // leave the item in place (Req 5.10).
+        setInUseById((prev) => ({
+          ...prev,
+          [subSourceId]: inUseMessage(result.error.count),
+        }));
+      }
+      // On success the live subscription removes the item (Req 5.9).
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -476,15 +611,69 @@ export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Eleme
               <div key={option} className="flex flex-col gap-1.5">
                 <h4 className="text-sm font-semibold text-on-surface">{option}</h4>
                 <ul className="flex flex-col gap-1">
-                  {items.map((subSource) => (
-                    <li
-                      key={subSource.id}
-                      className="text-sm text-on-surface-variant px-3 py-1.5 rounded-lg bg-surface-container-high/30 border border-outline-variant/20"
-                    >
-                      {subSource.nickname}
-                      {subSource.last4 ? ` ••${subSource.last4}` : ''}
-                    </li>
-                  ))}
+                  {items.map((subSource) => {
+                    const inUse = inUseById[subSource.id];
+                    const isConfirming = confirmingId === subSource.id;
+                    const isDeleting = deletingId === subSource.id;
+                    return (
+                      <li
+                        key={subSource.id}
+                        className="flex flex-col gap-1.5 text-sm text-on-surface-variant px-3 py-1.5 rounded-lg bg-surface-container-high/30 border border-outline-variant/20"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="flex-1 truncate">
+                            {subSource.nickname}
+                            {subSource.last4 ? ` ••${subSource.last4}` : ''}
+                          </span>
+                          {isConfirming ? (
+                            <span className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void handleDelete(subSource.id)}
+                                disabled={isDeleting}
+                                aria-busy={isDeleting}
+                                className="btn-ghost px-2.5 py-1 text-xs text-error"
+                              >
+                                {isDeleting ? 'Deleting…' : 'Confirm'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmingId(null)}
+                                disabled={isDeleting}
+                                className="btn-ghost px-2.5 py-1 text-xs"
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInUseById((prev) => {
+                                  const next = { ...prev };
+                                  delete next[subSource.id];
+                                  return next;
+                                });
+                                setConfirmingId(subSource.id);
+                              }}
+                              disabled={deletingId !== null}
+                              aria-label={`Delete sub-source ${subSource.nickname}`}
+                              className="btn-ghost p-1.5 text-on-surface-variant hover:text-error"
+                            >
+                              <span className="material-symbols-outlined text-lg" aria-hidden="true">
+                                delete
+                              </span>
+                            </button>
+                          )}
+                        </div>
+                        {inUse && (
+                          <p role="alert" className="text-error text-xs">
+                            {inUse}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             );

@@ -12,17 +12,24 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
+  doc,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   Timestamp,
+  updateDoc,
   type DocumentData,
   type QueryDocumentSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
 
-import { fromFirestore, toFirestore } from '../domain/expenseMapper';
+import {
+  fromFirestore,
+  toFirestore,
+  toUpdateFields,
+} from '../domain/expenseMapper';
 import type {
   Expense,
   ExpenseDocument,
@@ -67,6 +74,31 @@ export interface ExpenseRepository {
     onData: (expenses: Expense[]) => void,
     onError: (error: Error) => void,
   ): Unsubscribe;
+
+  /**
+   * Update an existing expense with re-validated fields. Writes only the
+   * user-editable fields plus the `updatedBy`/`updatedAt` audit fields (via
+   * {@link toUpdateFields} with a server timestamp), leaving the original
+   * `recordedBy`/`createdAt` untouched so the recorder identity and creation
+   * time are preserved (Req 3.15). Any member of the family may edit any
+   * expense, so no recorder check is performed (Req 3.19).
+   *
+   * Validates: Requirements 3.14, 3.15, 3.19
+   */
+  updateExpense(
+    familyId: string,
+    expenseId: string,
+    input: ExpenseInput,
+    member: FamilyMember,
+  ): Promise<void>;
+
+  /**
+   * Delete an expense from the family. Any member of the family may delete any
+   * expense, so no recorder check is performed (Req 3.18, 3.19).
+   *
+   * Validates: Requirements 3.18, 3.19
+   */
+  deleteExpense(familyId: string, expenseId: string): Promise<void>;
 }
 
 /** Build a reference to the `families/{familyId}/expenses` subcollection. */
@@ -183,5 +215,46 @@ export const expenseRepository: ExpenseRepository = {
         onError(error);
       },
     );
+  },
+
+  async updateExpense(
+    familyId: string,
+    expenseId: string,
+    input: ExpenseInput,
+    member: FamilyMember,
+  ): Promise<void> {
+    // Map the re-validated edited fields via the domain mapper, which carries
+    // the editable fields plus the `updatedBy`/`updatedAt` audit fields and
+    // intentionally omits `recordedBy`/`createdAt` so the original recorder
+    // identity and creation time are preserved (Req 3.15). Override the date
+    // with an SDK-native Timestamp and the update time with a server-generated
+    // timestamp, mirroring how `addExpense` handles the audit fields.
+    const base = toUpdateFields(input, member);
+    const docData: DocumentData = {
+      ...base,
+      date: Timestamp.fromDate(input.date),
+      updatedBy: member.uid,
+      updatedAt: serverTimestamp(),
+    };
+
+    // Defensive guard: Firestore rejects `undefined` field values. The mapper
+    // already omits an absent `subSourceId`, but strip it if it slipped through
+    // so we never attempt to write `undefined` (Req 3.8).
+    if (docData.subSourceId === undefined) {
+      delete docData.subSourceId;
+    }
+
+    // Any member of the family may edit any expense (Req 3.19); no recorder
+    // check is performed here.
+    await updateDoc(
+      doc(expensesCollection(familyId), expenseId),
+      docData,
+    );
+  },
+
+  async deleteExpense(familyId: string, expenseId: string): Promise<void> {
+    // Any member of the family may delete any expense (Req 3.18, 3.19); no
+    // recorder check is performed here.
+    await deleteDoc(doc(expensesCollection(familyId), expenseId));
   },
 };

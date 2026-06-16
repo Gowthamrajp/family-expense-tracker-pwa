@@ -39,6 +39,7 @@ import type {
   FamilyDocument,
   FamilyMember,
   LegacyExpenseDocument,
+  MemberProfileDocument,
   MigrationFailure,
 } from '../domain/types';
 import { firestore } from './firebase';
@@ -53,6 +54,8 @@ const INVITE_CODES_COLLECTION = 'inviteCodes';
 const CATEGORIES_SUBCOLLECTION = 'categories';
 /** Family-scoped subcollection holding expense documents. */
 const EXPENSES_SUBCOLLECTION = 'expenses';
+/** Family-scoped subcollection holding member-profile documents. */
+const MEMBERS_SUBCOLLECTION = 'members';
 /** Legacy top-level expenses collection migrated on first-family creation. */
 const LEGACY_EXPENSES_COLLECTION = 'expenses';
 
@@ -140,9 +143,31 @@ export interface FamilyRepository {
   /**
    * List the members of a family for the settings/members screen.
    *
-   * Validates: Requirements 2.6
+   * Reads the `families/{familyId}/members` subcollection (Member_Profile
+   * documents) so each returned member carries their real `displayName`/
+   * `email` (Req 2.9). When a profile document is missing for a uid present in
+   * the family's `memberUids` (a member who has not yet been backfilled), that
+   * member is still returned with `displayName`/`email` null so the row remains
+   * present and the UI can fall back to a uid label.
+   *
+   * Validates: Requirements 2.6, 2.9
    */
   listMembers(familyId: string): Promise<FamilyMember[]>;
+
+  /**
+   * Upsert the caller's own Member_Profile under
+   * `families/{familyId}/members/{uid}`. Writes `displayName`, `email`, a
+   * `joinedAt` server timestamp on first write (preserved on later upserts via
+   * merge), and an `updatedAt` server timestamp on every upsert. Called when a
+   * member creates/joins a family and on every sign-in/family-resolution so
+   * members who joined before profiles existed are backfilled (Req 2.7, 2.8).
+   *
+   * Targets only the caller's own document, which is the only member document
+   * the security rules permit them to write.
+   *
+   * Validates: Requirements 2.7, 2.8
+   */
+  upsertMemberProfile(familyId: string, member: FamilyMember): Promise<void>;
 }
 
 /** Adapt an SDK `Timestamp` (or null) to a `Date`, defaulting to now. */
@@ -494,15 +519,56 @@ export const familyRepository: FamilyRepository = {
       return [];
     }
     const memberUids = (familySnap.data().memberUids ?? []) as string[];
-    // LIMITATION: the app stores no user-profile collection of display
-    // names/emails beyond Firebase Auth, and a member can only read their own
-    // auth identity. So members are returned with their uid only and
-    // displayName/email null. This is acceptable for the MVP member list
-    // (Req 2.6); the UI can highlight the current member using the auth state.
-    return memberUids.map((uid) => ({
-      uid,
-      displayName: null,
-      email: null,
-    }));
+
+    // Read the members subcollection (Member_Profile documents) so members
+    // carry their real displayName/email (Req 2.9).
+    const membersRef = collection(
+      firestore,
+      FAMILIES_COLLECTION,
+      familyId,
+      MEMBERS_SUBCOLLECTION,
+    );
+    const membersSnap = await getDocs(membersRef);
+    const profileByUid = new Map<string, MemberProfileDocument>();
+    for (const snap of membersSnap.docs) {
+      profileByUid.set(snap.id, snap.data() as MemberProfileDocument);
+    }
+
+    // Return one member per uid in memberUids, preferring profile identity and
+    // falling back to a null-identity member when no profile exists yet so the
+    // row remains present for the UI (Req 2.9).
+    return memberUids.map((uid) => {
+      const profile = profileByUid.get(uid);
+      return {
+        uid,
+        displayName: profile?.displayName ?? null,
+        email: profile?.email ?? null,
+      };
+    });
+  },
+
+  async upsertMemberProfile(
+    familyId: string,
+    member: FamilyMember,
+  ): Promise<void> {
+    const memberRef = doc(
+      firestore,
+      FAMILIES_COLLECTION,
+      familyId,
+      MEMBERS_SUBCOLLECTION,
+      member.uid,
+    );
+    // Merge so a previously stored joinedAt is preserved across upserts; only
+    // set joinedAt when the document does not yet exist (first write, Req 2.7).
+    const existing = await getDoc(memberRef);
+    const profile: Record<string, unknown> = {
+      displayName: member.displayName ?? null,
+      email: member.email ?? null,
+      updatedAt: serverTimestamp(),
+    };
+    if (!existing.exists()) {
+      profile.joinedAt = serverTimestamp();
+    }
+    await setDoc(memberRef, profile, { merge: true });
   },
 };

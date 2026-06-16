@@ -18,6 +18,7 @@ The product was first delivered as a minimal viable product (MVP) covering authe
 - **Family**: A group of Family_Members who share expense data. Every Expense, Category, Source, and SubSource belongs to exactly one Family.
 - **Invite_Code**: A unique, shareable code generated when a Family is created that allows other Family_Members to join that Family.
 - **Family_Member**: An authenticated user who, after joining or creating a Family, may record and view that Family's expenses.
+- **Member_Profile**: A per-Family record that stores a Family_Member's display name, or email when no display name is available, so that the member list can display a readable name for every member of the Family rather than only an identifier.
 - **Category**: A family-scoped label classifying an Expense (for example, Groceries, Utilities, Transport), created and managed by Family_Members rather than a fixed built-in list.
 - **Default_Category_Set**: A small set of editable Categories created as data when a Family is created, which Family_Members can add to.
 - **Source**: The funding method used to pay for an Expense, such as Cash, Credit Card, Reward Points, Food Coupon, or Cashback Points, scoped to a Family.
@@ -57,7 +58,10 @@ The product was first delivered as a minimal viable product (MVP) covering authe
 4. IF a Family_Member submits an Invite_Code that does not match any existing Family, THEN THE PWA_Client SHALL display a message indicating that the Invite_Code is invalid and SHALL NOT add the Family_Member to any Family.
 5. WHILE a Family_Member belongs to a Family, THE Expense_Tracker SHALL treat that Family_Member as belonging to exactly one Family.
 6. WHILE a Family_Member belongs to a Family, THE PWA_Client SHALL provide a screen that lists the members of that Family and displays the Family's Invite_Code for sharing.
-7. IF a Family_Member who does not belong to any Family requests the Expense_Entry or Dashboard, THEN THE PWA_Client SHALL route the Family_Member to the create-or-join Family screen.
+7. WHEN a Family_Member creates or joins a Family, THE Expense_Tracker SHALL store a Member_Profile for that Family_Member containing the Family_Member's display name, or the Family_Member's email when no display name is available, readable by members of that Family.
+8. WHEN an existing Family_Member begins a Session, THE Expense_Tracker SHALL store or update that Family_Member's Member_Profile name so that members who joined before Member_Profiles existed are backfilled.
+9. WHILE the member list screen is displayed, THE PWA_Client SHALL show, for each member of the Family, the name stored in that member's Member_Profile, falling back to the member's email when no name is stored, and falling back to a member identifier when neither a name nor an email is stored.
+10. IF a Family_Member who does not belong to any Family requests the Expense_Entry or Dashboard, THEN THE PWA_Client SHALL route the Family_Member to the create-or-join Family screen.
 
 ### Requirement 3: Record an Expense
 
@@ -77,6 +81,13 @@ The product was first delivered as a minimal viable product (MVP) covering authe
 10. IF a Family_Member submits an Expense_Entry with a date that is not a valid calendar date, is earlier than 2000-01-01, or is later than the current date, THEN THE PWA_Client SHALL display a validation message indicating the allowed date range and SHALL NOT store the Expense.
 11. WHEN the Expense_Tracker successfully stores an Expense, THE PWA_Client SHALL display a confirmation indication and SHALL clear all fields of the Expense_Entry form.
 12. IF the Data_Store write does not complete successfully within 10 seconds or returns a failure, THEN THE PWA_Client SHALL display an error message indicating the save failed and SHALL retain all entered values in the form.
+13. WHILE a Session is active and the Family_Member belongs to a Family, THE PWA_Client SHALL provide, for each Expense displayed for that Family, an edit affordance that opens an edit form pre-populated with that Expense's stored amount, Category, Source, optional SubSource, date, and description.
+14. WHEN a Family_Member submits an edited Expense with an amount that is numeric, greater than or equal to 0.01, less than or equal to 999,999,999.99, and has at most 2 decimal places, with a selected Category that belongs to the Family, with a selected Source, and a date that is a valid calendar date not earlier than 2000-01-01 and not later than the current date, THE Expense_Tracker SHALL update the stored Expense in the Data_Store with the submitted values.
+15. WHEN the Expense_Tracker updates a stored Expense, THE Expense_Tracker SHALL preserve the Expense's original submitting Family_Member identifier and original creation timestamp unchanged and SHALL record the editing Family_Member identifier and an update timestamp with the Expense.
+16. IF a Family_Member submits an edited Expense with an amount that is non-numeric, less than 0.01, greater than 999,999,999.99, or has more than 2 decimal places, with no selected Category, with no selected Source, or with a date that is not a valid calendar date, is earlier than 2000-01-01, or is later than the current date, THEN THE PWA_Client SHALL display the corresponding per-field validation message and SHALL NOT update the stored Expense.
+17. WHILE a Session is active and the Family_Member belongs to a Family, THE PWA_Client SHALL provide, for each Expense displayed for that Family, a delete affordance that requests confirmation before deletion.
+18. WHEN a Family_Member confirms deletion of an Expense that belongs to the Family_Member's Family, THE Expense_Tracker SHALL remove that Expense from the Data_Store.
+19. WHERE a Family_Member edits or deletes an Expense that belongs to the Family_Member's Family, THE Expense_Tracker SHALL permit the action regardless of whether that Family_Member is the Family_Member who originally recorded the Expense.
 
 ### Requirement 4: Custom Categories
 
@@ -90,6 +101,9 @@ The product was first delivered as a minimal viable product (MVP) covering authe
 4. IF a Family_Member submits a new Category with a name that is empty, THEN THE PWA_Client SHALL display a validation message indicating that a Category name is required and SHALL NOT store the Category.
 5. IF a Family_Member submits a new Category with a name that duplicates an existing Category name within the same Family, THEN THE PWA_Client SHALL display a validation message indicating that the Category name already exists and SHALL NOT store the Category.
 6. THE Expense_Entry Category selection field SHALL offer the Categories that belong to the Family_Member's Family as its selectable options.
+7. WHILE a Session is active and the Family_Member belongs to a Family, THE PWA_Client SHALL provide a delete affordance for each Category that belongs to that Family.
+8. WHEN a Family_Member deletes a Category that belongs to the Family and is referenced by no Expenses in that Family, THE Expense_Tracker SHALL remove the Category from the Data_Store.
+9. IF a Family_Member attempts to delete a Category that is referenced by one or more Expenses in the Family, THEN THE Expense_Tracker SHALL NOT delete the Category and THE PWA_Client SHALL display a message indicating that the Category is in use by the number of referencing Expenses.
 
 ### Requirement 5: Payment Source Sub-sources
 
@@ -104,6 +118,9 @@ The product was first delivered as a minimal viable product (MVP) covering authe
 5. IF a Family_Member provides a last-4-digits identifier that is not exactly 4 numeric digits, THEN THE PWA_Client SHALL display a validation message indicating that the identifier must be exactly 4 digits and SHALL NOT store the SubSource.
 6. THE Expense_Tracker SHALL store only a nickname and an optional 4-digit identifier for a SubSource and SHALL NOT store a full card number.
 7. WHERE a Source has no SubSources defined for the Family, THE Expense_Entry SHALL allow an Expense to be recorded against that Source without selecting a SubSource.
+8. WHILE a Session is active and the Family_Member belongs to a Family, THE PWA_Client SHALL provide a delete affordance for each SubSource that belongs to that Family.
+9. WHEN a Family_Member deletes a SubSource that belongs to the Family and is referenced by no Expenses in that Family, THE Expense_Tracker SHALL remove the SubSource from the Data_Store.
+10. IF a Family_Member attempts to delete a SubSource that is referenced by one or more Expenses in the Family, THEN THE Expense_Tracker SHALL NOT delete the SubSource and THE PWA_Client SHALL display a message indicating that the SubSource is in use by the number of referencing Expenses.
 
 ### Requirement 6: View Recorded Expenses
 
@@ -158,8 +175,10 @@ The product was first delivered as a minimal viable product (MVP) covering authe
 1. IF a read request for a Family's Expense, Category, Source, or SubSource records does not originate from an authenticated Family_Member who belongs to that Family, THEN THE Data_Store SHALL reject the request, SHALL return no data, and SHALL respond indicating that access is denied.
 2. IF a write request for a Family's Expense, Category, Source, or SubSource records does not originate from an authenticated Family_Member who belongs to that Family, THEN THE Data_Store SHALL reject the request, SHALL NOT create, modify, or delete any record, and SHALL respond indicating that access is denied.
 3. WHILE a Family_Member belongs to a Family, THE Data_Store SHALL grant that Family_Member read and write access only to records that belong to that Family.
-4. WHILE no active authenticated Session exists, THE PWA_Client SHALL remove previously loaded Family data from view within 1 second of Session termination and SHALL NOT display it on subsequent navigation.
-5. THE Data_Store SHALL store, for any SubSource, only a nickname and an optional 4-digit identifier and SHALL NOT store a full card number.
+4. WHILE a Family_Member belongs to a Family, THE Data_Store SHALL permit that Family_Member to create, update, and delete Expense, Category, and SubSource records that belong to that Family.
+5. IF a request to update or delete a Family's Expense, Category, or SubSource records does not originate from an authenticated Family_Member who belongs to that Family, THEN THE Data_Store SHALL reject the request, SHALL NOT modify or delete any record, and SHALL respond indicating that access is denied.
+6. WHILE no active authenticated Session exists, THE PWA_Client SHALL remove previously loaded Family data from view within 1 second of Session termination and SHALL NOT display it on subsequent navigation.
+7. WHEN a SubSource is created or updated, THE Data_Store SHALL store, for that SubSource, only a nickname and an optional 4-digit identifier and SHALL NOT store a full card number.
 
 ### Requirement 10: Data Migration
 
@@ -190,9 +209,6 @@ The product was first delivered as a minimal viable product (MVP) covering authe
 
 The following capabilities are intentionally excluded and are candidates for future iterations:
 
-- Editing or deleting recorded Expenses.
-- Editing or deleting Categories (only adding Categories is in scope).
-- Editing or deleting SubSources (only adding SubSources is in scope).
 - Removing members from a Family, assigning roles to members, or regenerating or revoking an Invite_Code.
 - Belonging to more than one Family at a time, or switching between Families.
 - Filtering, searching, or date-range selection on the expense list or dashboard.

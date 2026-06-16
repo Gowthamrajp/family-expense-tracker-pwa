@@ -42,16 +42,26 @@ service cloud.firestore {
         allow read: if isMember(familyId);
         allow create: if isMember(familyId)
                       && request.resource.data.recordedBy == request.auth.uid;
-        allow update, delete: if false;        // editing/deleting out of scope
+        // Any member may edit/delete any expense in their family, regardless of
+        // who recorded it (Req 3.18, 3.19, 9.4). Cross-family/unauthenticated
+        // callers are rejected by isMember (Req 9.5). The rule cannot cheaply
+        // assert recordedBy/createdAt are unchanged on update, so that
+        // preservation (Req 3.15) is enforced in the data layer, which writes
+        // only the editable fields plus updatedBy/updatedAt.
+        allow update, delete: if isMember(familyId);
       }
       match /categories/{categoryId} {
         allow read: if isMember(familyId);
         allow create: if isMember(familyId);
-        allow update, delete: if false;        // only adding is in scope
+        // Members may delete a category in their family (Req 4.7, 9.4). The
+        // in-use block (Req 4.9) cannot be expressed in rules (no cheap
+        // cross-document existence check) and is enforced in the data layer.
+        allow delete: if isMember(familyId);
+        allow update: if false;                // editing a category is out of scope
       }
       match /subSources/{subSourceId} {
         allow read: if isMember(familyId);
-        // No-full-card-number guarantee (Req 9.5, 5.6): reject any payload with
+        // No-full-card-number guarantee (Req 9.7, 5.6): reject any payload with
         // extra fields; only source, nickname, and an optional 4-digit last4
         // are allowed.
         allow create: if isMember(familyId)
@@ -59,7 +69,20 @@ service cloud.firestore {
                       && request.resource.data.nickname is string
                       && (!('last4' in request.resource.data)
                           || request.resource.data.last4.matches('^[0-9]{4}$'));
-        allow update, delete: if false;        // only adding is in scope
+        // Members may delete a sub-source in their family (Req 5.8, 9.4). The
+        // in-use block (Req 5.10) is enforced in the data layer, same as
+        // categories.
+        allow delete: if isMember(familyId);
+        allow update: if false;                // editing a sub-source is out of scope
+      }
+      // Member_Profile: any member may read every profile in their family so
+      // the member list can show readable names (Req 2.6, 2.9); a member may
+      // write ONLY their own profile document (Req 2.7, 2.8). Cross-family and
+      // other-member writes are denied, preserving isolation.
+      match /members/{uid} {
+        allow read: if isMember(familyId);
+        allow create, update: if isMember(familyId) && request.auth.uid == uid;
+        allow delete: if false;
       }
     }
 

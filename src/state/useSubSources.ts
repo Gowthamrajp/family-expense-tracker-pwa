@@ -31,6 +31,7 @@ import { validateSubSource, type SubSourceError } from '../domain/subSource';
 import {
   err,
   ok,
+  type InUseError,
   type Result,
   type Source,
   type SubSource,
@@ -59,6 +60,16 @@ export interface UseSubSourcesResult {
   ): Promise<Result<SubSource, SubSourceError>>;
   /** Sub-sources whose `source` matches the given {@link Source} (Req 3.7, 5.7). */
   forSource(source: Source): SubSource[];
+  /**
+   * Delete a sub-source by id. Blocked when one or more Expenses in the family
+   * still reference it: returns `err({ kind: 'in-use', count })` and performs
+   * no delete (Req 5.10); otherwise removes the sub-source and resolves with
+   * `ok(undefined)` (Req 5.9). The live subscription removes the item from
+   * `subSources` on success.
+   */
+  deleteSubSource(
+    subSourceId: string,
+  ): Promise<Result<void, InUseError>>;
 }
 
 /** Raised by `addSubSource` when invoked without a resolved family. */
@@ -76,9 +87,9 @@ export class NoActiveFamilyError extends Error {
  *   subscribe and reports `loading` with no data. (Supplied by `useFamily` once
  *   task 28.4 wires it; call sites currently pass `null`.)
  * @returns The current sub-sources, subscription status, an `addSubSource`
- *   action, and a `forSource` selector.
+ *   action, a `forSource` selector, and a `deleteSubSource` action.
  *
- * Validates: Requirements 3.7, 5.1, 5.2, 5.7
+ * Validates: Requirements 3.7, 5.1, 5.2, 5.7, 5.8, 5.9, 5.10
  */
 export function useSubSources(familyId: string | null): UseSubSourcesResult {
   const [subSources, setSubSources] = useState<SubSource[]>([]);
@@ -144,5 +155,21 @@ export function useSubSources(familyId: string | null): UseSubSourcesResult {
     [subSources],
   );
 
-  return { subSources, status, addSubSource, forSource };
+  const deleteSubSource = useCallback(
+    async (subSourceId: string): Promise<Result<void, InUseError>> => {
+      if (familyId === null) {
+        // Defensive: callers should not invoke this without an active family.
+        throw new NoActiveFamilyError();
+      }
+
+      // Delegate the in-use check and delete to the data layer. On success the
+      // live subscription removes the item from `subSources` (Req 5.9); when
+      // referenced, the repository returns an in-use error and deletes nothing
+      // (Req 5.10).
+      return subSourceRepository.deleteSubSource(familyId, subSourceId);
+    },
+    [familyId],
+  );
+
+  return { subSources, status, addSubSource, forSource, deleteSubSource };
 }

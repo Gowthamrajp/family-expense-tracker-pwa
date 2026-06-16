@@ -28,11 +28,24 @@
  * - `error` — show an error message plus a retry control that re-attempts the
  *   retrieval via `retry()`; any previously displayed data is retained by the
  *   hook (Req 3.8, 3.9).
+ *
+ * Each row also exposes per-row Edit and Delete affordances available on every
+ * row regardless of who recorded the expense (Req 3.19). Edit opens
+ * {@link ExpenseEntryForm} in edit mode inside a glass-card modal/overlay,
+ * seeding it with the original {@link Expense}; a successful update closes the
+ * overlay via `onSaved` and the live subscription reflects the change
+ * (Req 3.13). Delete uses an inline confirmation prompt and, on confirm, calls
+ * `deleteExpense(expenseId)` from {@link useExpenses}; the live subscription
+ * removes the row (Req 3.17, 3.18).
  */
+import { useCallback, useEffect, useState } from 'react';
+
 import { useExpenses } from '../state/useExpenses';
 import { useCategories } from '../state/useCategories';
 import { useSubSources } from '../state/useSubSources';
 import { resolveLabels, type ExpenseRow } from '../domain/expenseMapper';
+import type { Expense } from '../domain/types';
+import { ExpenseEntryForm } from './ExpenseEntryForm';
 
 /** Message shown when no expenses exist for the family group (Req 3.6). */
 const EMPTY_STATE_MESSAGE = 'No expenses have been recorded yet.';
@@ -97,17 +110,44 @@ function categoryIcon(categoryName: string): string {
 
 /** Props for {@link ExpenseListRow}. */
 interface ExpenseListRowProps {
+  /** Display-ready projection used to render the row's labels (Req 6.2, 6.3). */
   row: ExpenseRow;
+  /**
+   * The original stored {@link Expense}, threaded through alongside its
+   * projected {@link ExpenseRow} so the Edit affordance can open the entry form
+   * in edit mode with the full record (id, `categoryId`, source, `subSourceId`,
+   * date, etc. — Req 3.13).
+   */
+  expense: Expense;
+  /** Open the edit modal for this expense (Req 3.13). */
+  onEdit: (expense: Expense) => void;
+  /**
+   * Delete this expense after confirmation (Req 3.17, 3.18). Returns the
+   * delete promise so the row can show an in-flight state.
+   */
+  onDelete: (expenseId: string) => Promise<void>;
 }
 
 /**
  * Render a single resolved expense as a glass-card row showing a category icon
  * chip, amount, Category name, Source name, SubSource nickname (when present),
- * recording member, date, and description (blank when empty).
+ * recording member, date, and description (blank when empty), plus per-row Edit
+ * and Delete affordances.
  *
- * Validates: Requirements 6.2, 6.3
+ * The Edit control opens the entry form in edit mode for the original Expense
+ * (Req 3.13). The Delete control uses an inline confirmation prompt — matching
+ * the dark FamilyVault styling used by the category/sub-source managers — and
+ * calls back to remove the expense on confirm (Req 3.17, 3.18). Both controls
+ * appear on every row regardless of who recorded the expense (Req 3.19).
+ *
+ * Validates: Requirements 3.13, 3.17, 3.18, 3.19, 6.2, 6.3
  */
-function ExpenseListRow({ row }: ExpenseListRowProps): JSX.Element {
+function ExpenseListRow({
+  row,
+  expense,
+  onEdit,
+  onDelete,
+}: ExpenseListRowProps): JSX.Element {
   const {
     amount,
     categoryName,
@@ -117,6 +157,26 @@ function ExpenseListRow({ row }: ExpenseListRowProps): JSX.Element {
     date,
     description,
   } = row;
+
+  // Inline delete-confirmation state, mirroring the category/sub-source manager
+  // pattern (Req 3.17). `isConfirming` swaps the trash icon for Confirm/Cancel
+  // controls; `isDeleting` reflects the in-flight delete.
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDelete = useCallback(async () => {
+    setIsDeleting(true);
+    try {
+      // The live subscription removes the row on success, so there is no local
+      // success state to manage here (Req 3.18).
+      await onDelete(expense.id);
+    } finally {
+      // If the delete failed the row is still present; drop the in-flight flag
+      // and close the confirm prompt so the member can retry.
+      setIsDeleting(false);
+      setIsConfirming(false);
+    }
+  }, [expense.id, onDelete]);
 
   return (
     <li
@@ -179,6 +239,62 @@ function ExpenseListRow({ row }: ExpenseListRowProps): JSX.Element {
           {formatDate(date)}
         </span>
       </div>
+
+      {/*
+        Per-row Edit/Delete affordances (Req 3.13, 3.17, 3.18, 3.19). Shown on
+        every row regardless of recorder. The Delete control toggles an inline
+        confirmation prompt before removing the expense.
+      */}
+      <div className="shrink-0 flex items-center gap-1">
+        {isConfirming ? (
+          <>
+            <button
+              type="button"
+              onClick={() => void handleConfirmDelete()}
+              disabled={isDeleting}
+              aria-busy={isDeleting}
+              data-testid="expense-delete-confirm"
+              className="btn-ghost px-2.5 py-1 text-xs text-error"
+            >
+              {isDeleting ? 'Deleting…' : 'Confirm'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsConfirming(false)}
+              disabled={isDeleting}
+              data-testid="expense-delete-cancel"
+              className="btn-ghost px-2.5 py-1 text-xs"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => onEdit(expense)}
+              aria-label={`Edit expense ${categoryName} ${formatAmount(amount)}`}
+              data-testid="expense-edit"
+              className="btn-ghost p-1.5 text-on-surface-variant hover:text-primary-container"
+            >
+              <span className="material-symbols-outlined text-lg" aria-hidden="true">
+                edit
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsConfirming(true)}
+              aria-label={`Delete expense ${categoryName} ${formatAmount(amount)}`}
+              data-testid="expense-delete"
+              className="btn-ghost p-1.5 text-on-surface-variant hover:text-error"
+            >
+              <span className="material-symbols-outlined text-lg" aria-hidden="true">
+                delete
+              </span>
+            </button>
+          </>
+        )}
+      </div>
     </li>
   );
 }
@@ -195,7 +311,7 @@ function ExpenseListRow({ row }: ExpenseListRowProps): JSX.Element {
  *   Defaults to `true` (the hook's own default), matching the guarded route
  *   where this screen is only mounted within an active Session.
  *
- * Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 6.1, 6.2, 6.3
+ * Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 3.13, 3.17, 3.18, 3.19, 6.1, 6.2, 6.3
  */
 export function ExpenseList({
   familyId = null,
@@ -203,7 +319,7 @@ export function ExpenseList({
 }: { familyId?: string | null; active?: boolean } = {}): JSX.Element {
   // SHIM (tasks 28.4/31): `familyId` defaults to `null` so the hooks stay idle
   // until `useFamily` supplies the active family id.
-  const { expenses, status, retry } = useExpenses(familyId, active);
+  const { expenses, status, retry, deleteExpense } = useExpenses(familyId, active);
 
   // Family categories and sub-sources supply the lookup data used to resolve
   // each expense's stored `categoryId`/`subSourceId` references to display
@@ -213,12 +329,34 @@ export function ExpenseList({
   const { categories } = useCategories(familyId);
   const { subSources } = useSubSources(familyId);
 
-  // Project each expense into a display-ready row with resolved labels. Kept
-  // inline (cheap, recomputed per snapshot) so rows always reflect the latest
-  // expense, category, and sub-source data delivered by the live subscriptions.
-  const rows = expenses.map((expense) =>
-    resolveLabels(expense, categories, subSources),
-  );
+  // The expense currently open in the edit modal, or `null` when no modal is
+  // shown (Req 3.13). Holds the original {@link Expense} so the entry form can
+  // pre-populate from the full stored record.
+  const [editing, setEditing] = useState<Expense | null>(null);
+
+  // Close the edit modal on Escape so the overlay is keyboard-dismissible.
+  useEffect(() => {
+    if (editing === null) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setEditing(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [editing]);
+
+  // Project each expense into a display-ready row with resolved labels, keeping
+  // the original {@link Expense} alongside so the row's Edit affordance can open
+  // the entry form in edit mode (Req 3.13). Kept inline (cheap, recomputed per
+  // snapshot) so rows always reflect the latest expense, category, and
+  // sub-source data delivered by the live subscriptions.
+  const entries = expenses.map((expense) => ({
+    expense,
+    row: resolveLabels(expense, categories, subSources),
+  }));
 
   return (
     <section
@@ -264,7 +402,7 @@ export function ExpenseList({
       )}
 
       {/* Empty state once a successful read returns no expenses (Req 3.6). */}
-      {status === 'ready' && rows.length === 0 && (
+      {status === 'ready' && entries.length === 0 && (
         <div className="glass-card p-card_padding flex flex-col items-center gap-3 text-center">
           <span className="material-symbols-outlined text-primary-container text-4xl" aria-hidden="true">
             receipt_long
@@ -276,12 +414,63 @@ export function ExpenseList({
       )}
 
       {/* Ordered expense list (Req 3.1, 3.2, 3.4, 6.1, 6.2, 6.3). */}
-      {rows.length > 0 && (
+      {entries.length > 0 && (
         <ul className="list-none m-0 p-0 flex flex-col gap-3">
-          {rows.map((row) => (
-            <ExpenseListRow key={row.id} row={row} />
+          {entries.map(({ expense, row }) => (
+            <ExpenseListRow
+              key={row.id}
+              row={row}
+              expense={expense}
+              onEdit={setEditing}
+              onDelete={deleteExpense}
+            />
           ))}
         </ul>
+      )}
+
+      {/*
+        Edit modal/overlay (Req 3.13). Mounts {@link ExpenseEntryForm} in edit
+        mode for the selected expense; `onSaved` closes the overlay on a
+        successful update and the live subscription reflects the change
+        (Req 6.5). Reuses the glass-card styling so the edit experience matches
+        the entry screen. The overlay is a labelled dialog and dismissible via
+        its backdrop, an explicit close control, or Escape.
+      */}
+      {editing !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 backdrop-blur-sm p-4"
+          onClick={(event) => {
+            // Dismiss only when the backdrop itself is clicked, not the dialog.
+            if (event.target === event.currentTarget) {
+              setEditing(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Edit expense"
+            data-testid="expense-edit-modal"
+            className="relative w-full max-w-xl my-8"
+          >
+            <button
+              type="button"
+              onClick={() => setEditing(null)}
+              aria-label="Close edit form"
+              data-testid="expense-edit-close"
+              className="absolute right-3 top-3 z-10 btn-ghost p-1.5 text-on-surface-variant hover:text-on-surface"
+            >
+              <span className="material-symbols-outlined text-lg" aria-hidden="true">
+                close
+              </span>
+            </button>
+            <ExpenseEntryForm
+              familyId={familyId}
+              existingExpense={editing}
+              onSaved={() => setEditing(null)}
+            />
+          </div>
+        </div>
       )}
     </section>
   );
