@@ -33,6 +33,10 @@ import { useFamily } from '../state/FamilyProvider';
 const INVALID_INVITE_CODE_MESSAGE =
   "That invite code didn't match any family.";
 
+/** Message shown when create/join fails for an unexpected reason. */
+const UNEXPECTED_ERROR_MESSAGE =
+  'Something went wrong. Please try again.';
+
 /**
  * Render the create-or-join Family screen.
  */
@@ -44,6 +48,7 @@ export function CreateJoinFamily(): JSX.Element | null {
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [invalidCode, setInvalidCode] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // A family has been created/joined: routing moves the member onward, so this
   // screen renders nothing (Req 2.2, 2.3).
@@ -58,10 +63,14 @@ export function CreateJoinFamily(): JSX.Element | null {
       return;
     }
     setInvalidCode(false);
+    setErrorMessage(null);
     setIsCreating(true);
     try {
       const trimmed = familyName.trim();
       await createFamily(trimmed || undefined);
+    } catch {
+      // Surface unexpected failures rather than silently staying on the page.
+      setErrorMessage(UNEXPECTED_ERROR_MESSAGE);
     } finally {
       setIsCreating(false);
     }
@@ -72,16 +81,18 @@ export function CreateJoinFamily(): JSX.Element | null {
       return;
     }
     setInvalidCode(false);
+    setErrorMessage(null);
     setIsJoining(true);
     try {
       await joinFamily(inviteCode);
     } catch (error) {
-      // Only an unknown invite code produces the inline invalid-code message
-      // (Req 2.4); other errors are left to propagate to error handling.
+      // An unknown invite code produces the inline invalid-code message
+      // (Req 2.4); any other error surfaces a generic failure message so the
+      // member is not stranded on the screen with no feedback.
       if (error instanceof InvalidInviteCodeError) {
         setInvalidCode(true);
       } else {
-        throw error;
+        setErrorMessage(UNEXPECTED_ERROR_MESSAGE);
       }
     } finally {
       setIsJoining(false);
@@ -181,6 +192,12 @@ export function CreateJoinFamily(): JSX.Element | null {
           </button>
         </section>
       </div>
+
+      {errorMessage && (
+        <p role="alert" className="text-error text-sm">
+          {errorMessage}
+        </p>
+      )}
     </main>
   );
 }

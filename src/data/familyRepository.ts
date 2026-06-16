@@ -473,24 +473,38 @@ export const familyRepository: FamilyRepository = {
     const familyRef = doc(firestore, FAMILIES_COLLECTION, familyId);
     const userRef = doc(firestore, USERS_COLLECTION, member.uid);
 
-    const family = await runTransaction(firestore, async (tx) => {
-      const familySnap = await tx.get(familyRef);
-      if (!familySnap.exists()) {
-        // Index points at a missing family; treat as an invalid code.
+    // IMPORTANT: do NOT read the family document before joining. The family
+    // read rule (`allow read: if isMember(familyId)`) denies reads to a caller
+    // who is not yet a member, so reading first (e.g. inside the transaction)
+    // fails with permission-denied for every new joiner and leaves them stuck
+    // on the create/join screen. Instead, perform writes only — which the
+    // rules DO allow because the caller ends up in `memberUids` and writes
+    // their own routing doc — then read the family afterward, once the caller
+    // is a member.
+    //
+    // A writes-only transaction keeps the two writes atomic. `tx.update`
+    // requires the family to exist; a stale invite index pointing at a missing
+    // family throws not-found, which we surface as an invalid code (Req 2.4).
+    try {
+      await runTransaction(firestore, async (tx) => {
+        tx.update(familyRef, { memberUids: arrayUnion(member.uid) });
+        tx.set(userRef, { familyId });
+      });
+    } catch (error) {
+      const code = (error as { code?: string } | null)?.code;
+      if (code === 'not-found') {
+        // The invite index referenced a family that no longer exists.
         throw new InvalidInviteCodeError(normalizedCode);
       }
-      tx.update(familyRef, { memberUids: arrayUnion(member.uid) });
-      tx.set(userRef, { familyId });
+      throw error;
+    }
 
-      const data = familySnap.data();
-      const memberUids = new Set<string>(
-        (data.memberUids ?? []) as string[],
-      );
-      memberUids.add(member.uid);
-      return toFamily(familyId, { ...data, memberUids: [...memberUids] });
-    });
-
-    return family;
+    // The caller is now a member, so this read passes the member-only rule.
+    const familySnap = await getDoc(familyRef);
+    if (!familySnap.exists()) {
+      throw new InvalidInviteCodeError(normalizedCode);
+    }
+    return toFamily(familyId, familySnap.data());
   },
 
   async getFamilyForMember(uid: string): Promise<Family | null> {
