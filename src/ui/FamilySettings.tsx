@@ -26,6 +26,7 @@ import { useState } from 'react';
 
 import { resolveMemberLabel } from '../domain/member';
 import { SOURCES, type FamilyMember, type Source } from '../domain/types';
+import { useAuth } from '../state/AuthProvider';
 import { useCategories } from '../state/useCategories';
 import { useFamily } from '../state/FamilyProvider';
 import { useSubSources } from '../state/useSubSources';
@@ -42,6 +43,18 @@ const SUBSOURCE_INVALID_LAST4_MESSAGE = 'Last 4 digits must be exactly 4 digits.
  */
 function inUseMessage(count: number): string {
   return `In use by ${count} expense${count === 1 ? '' : 's'}.`;
+}
+
+/**
+ * Trim a nullable member field and treat empty/whitespace-only values as
+ * absent, so a blank stored displayName/email does not render as an empty line.
+ */
+function normalizeMemberField(value: string | null | undefined): string | null {
+  if (value == null) {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 /** Shared classes for ghost form controls. */
@@ -132,6 +145,7 @@ function FamilySection({
   isOwner,
   onRemoveMember,
 }: FamilySectionProps): JSX.Element {
+  const { member: currentMember } = useAuth();
   const [copied, setCopied] = useState(false);
   // Uid of the member awaiting remove confirmation (inline confirm state).
   const [confirmingUid, setConfirmingUid] = useState<string | null>(null);
@@ -215,15 +229,25 @@ function FamilySection({
         ) : (
           <ul className="flex flex-col gap-2">
             {members.map((member) => {
-              // listMembers now returns profile-backed members with real
-              // displayName/email, so resolve the label directly (Req 2.9).
-              // Only fall back to the uid when neither a name nor an email is
-              // stored (resolveMemberLabel returns "Signed in" in that case).
-              const hasIdentity =
-                member.displayName !== null || member.email !== null;
-              const display = hasIdentity
+              // listMembers returns profile-backed members with real
+              // displayName/email (Req 2.9). Show the name as the primary label
+              // and the email as a secondary line when both are present and
+              // differ. When no profile identity is stored yet, show a friendly
+              // fallback rather than a raw uid.
+              const name = normalizeMemberField(member.displayName);
+              const email = normalizeMemberField(member.email);
+              const hasIdentity = name !== null || email !== null;
+              const primaryLabel = hasIdentity
                 ? resolveMemberLabel(member)
-                : member.uid;
+                : 'Member';
+              // Show the email on a second line only when there is a distinct
+              // name above it (otherwise the email is already the primary line).
+              const secondaryEmail =
+                name !== null && email !== null && email !== primaryLabel
+                  ? email
+                  : null;
+              const isCurrentUser =
+                currentMember !== null && member.uid === currentMember.uid;
               const isMemberOwner = ownerUid !== null && member.uid === ownerUid;
               // The remove control is shown only to the owner, and never on the
               // owner's own row (Req 12.5, 12.7).
@@ -235,12 +259,24 @@ function FamilySection({
                   key={member.uid}
                   className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-container-high/30 border border-outline-variant/20"
                 >
-                  <span className="material-symbols-outlined text-primary-container text-lg" aria-hidden="true">
+                  <span className="material-symbols-outlined text-primary-container text-lg shrink-0" aria-hidden="true">
                     account_circle
                   </span>
-                  <span className="text-on-surface text-sm truncate flex-1">{display}</span>
+                  <span className="flex flex-col min-w-0 flex-1">
+                    <span className="text-on-surface text-sm truncate">
+                      {primaryLabel}
+                      {isCurrentUser && (
+                        <span className="text-on-surface-variant"> (You)</span>
+                      )}
+                    </span>
+                    {secondaryEmail && (
+                      <span className="text-on-surface-variant text-xs truncate">
+                        {secondaryEmail}
+                      </span>
+                    )}
+                  </span>
                   {isMemberOwner && (
-                    <span className="text-xs uppercase tracking-wide text-primary-container px-2 py-0.5 rounded-full bg-primary-container/10 border border-primary-container/30">
+                    <span className="text-xs uppercase tracking-wide text-primary-container px-2 py-0.5 rounded-full bg-primary-container/10 border border-primary-container/30 shrink-0">
                       Owner
                     </span>
                   )}
@@ -270,7 +306,7 @@ function FamilySection({
                         type="button"
                         onClick={() => setConfirmingUid(member.uid)}
                         disabled={removingUid !== null}
-                        aria-label={`Remove member ${display}`}
+                        aria-label={`Remove member ${primaryLabel}`}
                         className="btn-ghost p-1.5 text-on-surface-variant hover:text-error"
                       >
                         <span className="material-symbols-outlined text-lg" aria-hidden="true">
