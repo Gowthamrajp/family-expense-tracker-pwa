@@ -41,6 +41,7 @@ import {
   familyRepository as defaultFamilyRepository,
   type FamilyRepository,
 } from '../data/familyRepository';
+import { recurringRepository } from '../data/recurringRepository';
 import type { Family, FamilyMember, MigrationFailure } from '../domain/types';
 import { useAuth } from './AuthProvider';
 
@@ -216,6 +217,19 @@ export function FamilyProvider({
         setFamily(resolvedFamily);
         setMembers(familyMembers);
         setStatus('ready');
+
+        // Best-effort, non-blocking: materialize any due recurring-payment
+        // expenses now that the family is resolved. The app has no server
+        // scheduler, so this client-side catch-up runs on each resolution. A
+        // failure is logged and never blocks the ready state.
+        void recurringRepository
+          .materializeDueExpenses(resolvedFamily.id, member)
+          .catch((error) => {
+            console.warn(
+              `Failed to materialize recurring expenses for ${resolvedFamily.id}:`,
+              error,
+            );
+          });
       } catch {
         if (resolutionRef.current !== resolutionId) {
           return;

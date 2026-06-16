@@ -52,6 +52,7 @@ import {
   totalAmount,
 } from '../domain/aggregation';
 import type { Expense, GroupTotal } from '../domain/types';
+import { Money, formatINR } from './Money';
 
 /** Message shown when no expenses exist for the family group (Req 4.6). */
 const EMPTY_STATE_MESSAGE = 'No expenses have been recorded yet.';
@@ -59,20 +60,9 @@ const EMPTY_STATE_MESSAGE = 'No expenses have been recorded yet.';
 /** Message shown when the dashboard data could not be loaded (Req 4.7). */
 const LOAD_ERROR_MESSAGE = 'Dashboard data could not be loaded.';
 
-/**
- * Format a monetary amount as currency for display.
- *
- * Uses INR as the MVP's single currency (multi-currency is out of scope),
- * matching the expense list's formatting. The `en-IN` locale renders the
- * rupee symbol with Indian digit grouping (e.g. ₹1,00,000.00).
- */
-const currencyFormatter = new Intl.NumberFormat('en-IN', {
-  style: 'currency',
-  currency: 'INR',
-});
-
+/** Format a monetary amount as INR currency (shared helper). */
 function formatAmount(amount: number): string {
-  return currencyFormatter.format(amount);
+  return formatINR(amount);
 }
 
 /** Neon-cyan accent used across chart bars/gradients. */
@@ -270,12 +260,11 @@ export function Dashboard({
             <h2 className="text-label-caps uppercase text-on-surface-variant mb-2">
               Total Family Spend
             </h2>
-            <p
-              data-testid="dashboard-total"
+            <Money
+              amount={total}
+              testId="dashboard-total"
               className="text-[clamp(40px,8vw,64px)] leading-none font-extrabold tracking-tighter text-white neon-glow"
-            >
-              {formatAmount(total)}
-            </p>
+            />
             <span className="material-symbols-outlined absolute right-6 top-6 text-primary-container/30 text-5xl" aria-hidden="true">
               insights
             </span>

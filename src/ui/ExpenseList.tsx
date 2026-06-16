@@ -38,14 +38,15 @@
  * `deleteExpense(expenseId)` from {@link useExpenses}; the live subscription
  * removes the row (Req 3.17, 3.18).
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useExpenses } from '../state/useExpenses';
 import { useCategories } from '../state/useCategories';
 import { useSubSources } from '../state/useSubSources';
 import { resolveLabels, type ExpenseRow } from '../domain/expenseMapper';
-import type { Expense } from '../domain/types';
+import { SOURCES, type Expense, type Source } from '../domain/types';
 import { ExpenseEntryForm } from './ExpenseEntryForm';
+import { Money } from './Money';
 
 /** Message shown when no expenses exist for the family group (Req 3.6). */
 const EMPTY_STATE_MESSAGE = 'No expenses have been recorded yet.';
@@ -126,6 +127,8 @@ interface ExpenseListRowProps {
    * delete promise so the row can show an in-flight state.
    */
   onDelete: (expenseId: string) => Promise<void>;
+  /** Open the details drawer for this expense. */
+  onSelect: (expense: Expense) => void;
 }
 
 /**
@@ -147,6 +150,7 @@ function ExpenseListRow({
   expense,
   onEdit,
   onDelete,
+  onSelect,
 }: ExpenseListRowProps): JSX.Element {
   const {
     amount,
@@ -190,8 +194,15 @@ function ExpenseListRow({
         </span>
       </div>
 
-      {/* Primary info: category, recorded-by, source/sub-source, description. */}
-      <div className="flex-1 min-w-0">
+      {/* Primary info: category, recorded-by, source/sub-source, description.
+          Clicking opens the details drawer. */}
+      <button
+        type="button"
+        onClick={() => onSelect(expense)}
+        data-testid="expense-open-details"
+        aria-label={`View details for ${categoryName} ${formatAmount(amount)}`}
+        className="flex-1 min-w-0 text-left"
+      >
         <div className="flex items-center gap-2 flex-wrap">
           <span data-testid="expense-category" className="font-semibold text-on-surface">
             {categoryName}
@@ -225,16 +236,15 @@ function ExpenseListRow({
         >
           {description}
         </span>
-      </div>
+      </button>
 
       {/* Amount + date, right aligned. */}
       <div className="text-right shrink-0">
-        <span
-          data-testid="expense-amount"
+        <Money
+          amount={amount}
+          testId="expense-amount"
           className="block font-mono-data text-lg font-semibold text-white"
-        >
-          {formatAmount(amount)}
-        </span>
+        />
         <span data-testid="expense-date" className="block text-xs text-on-surface-variant mt-0.5">
           {formatDate(date)}
         </span>
@@ -334,29 +344,71 @@ export function ExpenseList({
   // pre-populate from the full stored record.
   const [editing, setEditing] = useState<Expense | null>(null);
 
-  // Close the edit modal on Escape so the overlay is keyboard-dismissible.
+  // The expense whose details drawer is open, or `null` when closed.
+  const [selected, setSelected] = useState<Expense | null>(null);
+
+  // Filter controls: free-text search, source filter, and category filter.
+  const [searchText, setSearchText] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<Source | 'all'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+  // Close the edit modal / details drawer on Escape so overlays are
+  // keyboard-dismissible.
   useEffect(() => {
-    if (editing === null) {
+    if (editing === null && selected === null) {
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setEditing(null);
+        setSelected(null);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [editing]);
+  }, [editing, selected]);
 
   // Project each expense into a display-ready row with resolved labels, keeping
   // the original {@link Expense} alongside so the row's Edit affordance can open
   // the entry form in edit mode (Req 3.13). Kept inline (cheap, recomputed per
   // snapshot) so rows always reflect the latest expense, category, and
   // sub-source data delivered by the live subscriptions.
-  const entries = expenses.map((expense) => ({
+  const allEntries = expenses.map((expense) => ({
     expense,
     row: resolveLabels(expense, categories, subSources),
   }));
+
+  // Apply the search/filter controls. Search matches the description, category
+  // name, source, or sub-source nickname (case-insensitive).
+  const entries = useMemo(() => {
+    const needle = searchText.trim().toLowerCase();
+    return allEntries.filter(({ row }) => {
+      if (sourceFilter !== 'all' && row.sourceName !== sourceFilter) {
+        return false;
+      }
+      if (categoryFilter !== 'all' && row.categoryName !== categoryFilter) {
+        return false;
+      }
+      if (needle !== '') {
+        const haystack = [
+          row.description,
+          row.categoryName,
+          row.sourceName,
+          row.subSourceNickname ?? '',
+          row.recordedByName ?? '',
+        ]
+          .join(' ')
+          .toLowerCase();
+        if (!haystack.includes(needle)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [allEntries, searchText, sourceFilter, categoryFilter]);
+
+  const isFiltering =
+    searchText.trim() !== '' || sourceFilter !== 'all' || categoryFilter !== 'all';
 
   return (
     <section
@@ -364,7 +416,64 @@ export function ExpenseList({
       aria-label="Recorded expenses"
       className="p-5 md:px-container_padding md:py-8 flex flex-col gap-grid_gap"
     >
-      <h1 className="text-headline-lg font-bold text-on-surface">Expenses</h1>
+      <h1 className="text-headline-lg font-bold text-on-surface">Transactions</h1>
+
+      {/* Search + filter bar (transaction history). */}
+      {(status !== 'loading' || allEntries.length > 0) && (
+        <div className="glass-card p-4 flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px]">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base" aria-hidden="true">
+              search
+            </span>
+            <input
+              type="search"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="Search transactions…"
+              aria-label="Search transactions"
+              data-testid="expense-search"
+              className="ghost-input w-full py-2.5 pl-10 pr-4 text-body-md"
+            />
+          </div>
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value as Source | 'all')}
+            aria-label="Filter by source"
+            data-testid="expense-filter-source"
+            className="ghost-input px-3 py-2.5 text-sm"
+          >
+            <option value="all">All sources</option>
+            {SOURCES.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            aria-label="Filter by category"
+            data-testid="expense-filter-category"
+            className="ghost-input px-3 py-2.5 text-sm"
+          >
+            <option value="all">All categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.name}>{c.name}</option>
+            ))}
+          </select>
+          {isFiltering && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchText('');
+                setSourceFilter('all');
+                setCategoryFilter('all');
+              }}
+              className="btn-ghost px-3 py-2 text-sm"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Loading indicator while the list is being retrieved (Req 3.7). */}
       {status === 'loading' && (
@@ -401,14 +510,17 @@ export function ExpenseList({
         </div>
       )}
 
-      {/* Empty state once a successful read returns no expenses (Req 3.6). */}
+      {/* Empty state once a successful read returns no expenses (Req 3.6),
+          or when active filters match nothing. */}
       {status === 'ready' && entries.length === 0 && (
         <div className="glass-card p-card_padding flex flex-col items-center gap-3 text-center">
           <span className="material-symbols-outlined text-primary-container text-4xl" aria-hidden="true">
-            receipt_long
+            {isFiltering ? 'search_off' : 'receipt_long'}
           </span>
           <p data-testid="expense-empty" className="text-on-surface-variant text-body-lg">
-            {EMPTY_STATE_MESSAGE}
+            {isFiltering
+              ? 'No transactions match your search or filters.'
+              : EMPTY_STATE_MESSAGE}
           </p>
         </div>
       )}
@@ -423,6 +535,7 @@ export function ExpenseList({
               expense={expense}
               onEdit={setEditing}
               onDelete={deleteExpense}
+              onSelect={setSelected}
             />
           ))}
         </ul>
@@ -472,6 +585,151 @@ export function ExpenseList({
           </div>
         </div>
       )}
+
+      {/* Details side drawer: opens when a transaction row is clicked. Shows
+          the full record with Edit/Delete actions. Dismissible via backdrop,
+          a close control, or Escape. */}
+      {selected !== null && (
+        <TransactionDetailsDrawer
+          row={resolveLabels(selected, categories, subSources)}
+          expense={selected}
+          onClose={() => setSelected(null)}
+          onEdit={(expense) => {
+            setSelected(null);
+            setEditing(expense);
+          }}
+          onDelete={async (expenseId) => {
+            await deleteExpense(expenseId);
+            setSelected(null);
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+/** Props for {@link TransactionDetailsDrawer}. */
+interface TransactionDetailsDrawerProps {
+  row: ExpenseRow;
+  expense: Expense;
+  onClose: () => void;
+  onEdit: (expense: Expense) => void;
+  onDelete: (expenseId: string) => Promise<void>;
+}
+
+/**
+ * Slide-over drawer showing the full details of a single transaction, with
+ * Edit and Delete actions. Mirrors the transaction-history detail pane from the
+ * FamilyVault design.
+ */
+function TransactionDetailsDrawer({
+  row,
+  expense,
+  onClose,
+  onEdit,
+  onDelete,
+}: TransactionDetailsDrawerProps): JSX.Element {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = useCallback(async () => {
+    setIsDeleting(true);
+    try {
+      await onDelete(expense.id);
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [expense.id, onDelete]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label="Transaction details"
+        data-testid="expense-details-drawer"
+        className="w-full max-w-md h-full overflow-y-auto custom-scrollbar bg-surface-container-lowest border-l border-outline-variant/30 p-6 flex flex-col gap-6"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-label-caps uppercase text-on-surface-variant">Transaction</p>
+            <h2 className="text-headline-md font-semibold text-on-surface mt-1">
+              {row.categoryName}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close details"
+            data-testid="expense-details-close"
+            className="btn-ghost p-1.5 text-on-surface-variant hover:text-on-surface"
+          >
+            <span className="material-symbols-outlined text-lg" aria-hidden="true">close</span>
+          </button>
+        </div>
+
+        <div className="glass-card p-card_padding flex flex-col items-center gap-2 text-center">
+          <span className="text-label-caps uppercase text-on-surface-variant">Amount</span>
+          <Money amount={row.amount} className="text-[clamp(32px,6vw,44px)] leading-none font-extrabold tracking-tighter text-white neon-glow" />
+          <span className="text-sm text-on-surface-variant mt-1">{formatDate(row.date)}</span>
+        </div>
+
+        <dl className="flex flex-col gap-3 text-sm">
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-on-surface-variant">Source</dt>
+            <dd className="text-on-surface">{row.sourceName}</dd>
+          </div>
+          {row.subSourceNickname !== undefined && (
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-on-surface-variant">Card/account</dt>
+              <dd className="text-on-surface">{row.subSourceNickname}</dd>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-on-surface-variant">Recorded by</dt>
+            <dd className="text-on-surface">{row.recordedByName}</dd>
+          </div>
+        </dl>
+
+        {/* Notes / description section. */}
+        <section className="flex flex-col gap-2">
+          <h3 className="text-label-caps uppercase text-on-surface-variant">Notes</h3>
+          {row.description.trim() !== '' ? (
+            <p className="glass-card p-4 italic text-on-surface-variant">{row.description}</p>
+          ) : (
+            <p className="text-on-surface-variant/60 italic">No notes.</p>
+          )}
+        </section>
+
+        <div className="mt-auto flex gap-3">
+          <button
+            type="button"
+            onClick={() => onEdit(expense)}
+            data-testid="expense-details-edit"
+            className="btn-ghost flex-1 py-3 flex items-center justify-center gap-2"
+          >
+            <span className="material-symbols-outlined text-lg" aria-hidden="true">edit</span>
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleDelete()}
+            disabled={isDeleting}
+            aria-busy={isDeleting}
+            data-testid="expense-details-delete"
+            className="btn-ghost flex-1 py-3 flex items-center justify-center gap-2 text-error border-error/30 hover:bg-error/10"
+          >
+            <span className="material-symbols-outlined text-lg" aria-hidden="true">delete</span>
+            {isDeleting ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
+      </aside>
+    </div>
   );
 }

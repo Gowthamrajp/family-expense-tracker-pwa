@@ -117,6 +117,7 @@ function toFamilyMember(user: User): FamilyMember {
     uid: user.uid,
     displayName: user.displayName,
     email: user.email,
+    photoURL: user.photoURL,
   };
 }
 

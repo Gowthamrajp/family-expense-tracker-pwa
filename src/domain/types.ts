@@ -290,6 +290,81 @@ export interface SubSourceDocument {
 }
 
 /**
+ * How often a {@link RecurringRule} generates an Expense. Fixed enumeration.
+ */
+export type RecurringFrequency = 'weekly' | 'monthly';
+
+/** All valid {@link RecurringFrequency} values, useful for selects. */
+export const RECURRING_FREQUENCIES: readonly RecurringFrequency[] = [
+  'weekly',
+  'monthly',
+] as const;
+
+/**
+ * A recurring-payment rule. Defines a template Expense and a schedule; the app
+ * auto-materializes due Expenses from it when a member opens the app (there is
+ * no server scheduler). Stored under
+ * `families/{familyId}/recurringRules/{ruleId}`.
+ */
+export interface RecurringRule {
+  id: string;
+  /** Template amount (same constraints as an Expense amount). */
+  amount: number;
+  /** Family Category id the generated Expense is filed under. */
+  categoryId: string;
+  /** Funding method of the generated Expense. */
+  source: Source;
+  /** Optional SubSource id of the generated Expense. */
+  subSourceId?: string;
+  /** Template description copied onto each generated Expense. */
+  description: string;
+  /** How often an occurrence is due. */
+  frequency: RecurringFrequency;
+  /** First date an occurrence is due (local calendar date). */
+  startDate: Date;
+  /**
+   * The last occurrence date already materialized into an Expense, or null when
+   * none has been generated yet. Advanced as occurrences are created so
+   * generation is idempotent and catches up missed periods.
+   */
+  lastRunDate: Date | null;
+  /** Whether the rule is active (paused rules generate nothing). */
+  active: boolean;
+  /** Uid of the member who created the rule. */
+  createdBy: string;
+  /** Creation timestamp. */
+  createdAt: Date;
+}
+
+/** Validated recurring-rule input ready to persist (no id/audit fields). */
+export interface RecurringRuleInput {
+  amount: number;
+  categoryId: string;
+  source: Source;
+  subSourceId?: string;
+  description: string;
+  frequency: RecurringFrequency;
+  startDate: Date;
+}
+
+/**
+ * Document shape stored at `families/{familyId}/recurringRules/{ruleId}`.
+ */
+export interface RecurringRuleDocument {
+  amount: number;
+  categoryId: string;
+  source: string;
+  subSourceId?: string;
+  description: string;
+  frequency: string;
+  startDate: FirestoreTimestamp;
+  lastRunDate?: FirestoreTimestamp | null;
+  active: boolean;
+  createdBy: string;
+  createdAt: FirestoreTimestamp;
+}
+
+/**
  * Routing document stored at `users/{uid}`; maps a user to their family and
  * powers the family-scoped security-rules membership check.
  */
@@ -315,6 +390,11 @@ export interface FamilyMember {
   uid: string;
   displayName: string | null;
   email: string | null;
+  /**
+   * URL of the member's profile photo (e.g. their Google account photo), or
+   * null when none is available. Used to render member avatars.
+   */
+  photoURL?: string | null;
 }
 
 /**
@@ -329,6 +409,8 @@ export interface MemberProfile {
   displayName: string | null;
   /** Fallback identity when no display name is available (Req 2.7, 2.9). */
   email: string | null;
+  /** Profile photo URL (e.g. Google account photo), or null when none. */
+  photoURL: string | null;
   /** First time the profile was written (create/join). */
   joinedAt: Date;
   /** Last upsert time, refreshed on each sign-in (Req 2.8). */
@@ -344,6 +426,8 @@ export interface MemberProfileDocument {
   displayName: string | null;
   /** Fallback identity when no display name is available (Req 2.7, 2.9). */
   email: string | null;
+  /** Profile photo URL (e.g. Google account photo), or null/absent when none. */
+  photoURL?: string | null;
   /** serverTimestamp() on first write. */
   joinedAt: FirestoreTimestamp;
   /** serverTimestamp() on each upsert (Req 2.8). */

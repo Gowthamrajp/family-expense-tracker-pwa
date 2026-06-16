@@ -36,6 +36,8 @@ import { Dashboard } from './Dashboard';
 import { ExpenseEntryForm } from './ExpenseEntryForm';
 import { ExpenseList } from './ExpenseList';
 import { FamilySettings } from './FamilySettings';
+import { Insights } from './Insights';
+import { Recurring } from './Recurring';
 import { RequireAuth } from './RequireAuth';
 import { RequireFamily } from './RequireFamily';
 import { SignIn } from './SignIn';
@@ -66,6 +68,23 @@ function ExpenseEntryRoute(): JSX.Element {
 }
 
 /**
+ * Insights wrapper that supplies the active family id from {@link useFamily}.
+ */
+function InsightsRoute(): JSX.Element {
+  const { family } = useFamily();
+  return <Insights familyId={family?.id ?? null} />;
+}
+
+/**
+ * Recurring-payments wrapper that supplies the active family id from
+ * {@link useFamily}.
+ */
+function RecurringRoute(): JSX.Element {
+  const { family } = useFamily();
+  return <Recurring familyId={family?.id ?? null} />;
+}
+
+/**
  * Declarative route table. Mount inside a router (e.g. `BrowserRouter`) that is
  * itself nested under `AuthProvider` and `FamilyProvider` so {@link RequireAuth}
  * and {@link RequireFamily} can read the Session and family.
@@ -89,6 +108,8 @@ export function AppRouter(): JSX.Element {
           <Route element={<AppShell />}>
             <Route path="/" element={<DashboardRoute />} />
             <Route path="/expenses" element={<ExpenseListRoute />} />
+            <Route path="/insights" element={<InsightsRoute />} />
+            <Route path="/recurring" element={<RecurringRoute />} />
             <Route path="/add" element={<ExpenseEntryRoute />} />
             <Route path="/settings" element={<FamilySettings />} />
           </Route>

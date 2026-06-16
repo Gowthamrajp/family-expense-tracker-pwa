@@ -25,15 +25,18 @@ import { BrowserRouter } from 'react-router-dom';
 
 import { AuthProvider } from '../state/AuthProvider';
 import { FamilyProvider } from '../state/FamilyProvider';
+import { PrivacyProvider } from '../state/PrivacyProvider';
 import { AppRouter } from './AppRouter';
 
 export function App() {
   return (
     <AuthProvider>
       <FamilyProvider>
-        <BrowserRouter>
-          <AppRouter />
-        </BrowserRouter>
+        <PrivacyProvider>
+          <BrowserRouter>
+            <AppRouter />
+          </BrowserRouter>
+        </PrivacyProvider>
       </FamilyProvider>
     </AuthProvider>
   );

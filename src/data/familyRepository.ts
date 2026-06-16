@@ -600,6 +600,7 @@ export const familyRepository: FamilyRepository = {
         uid,
         displayName: profile?.displayName ?? null,
         email: profile?.email ?? null,
+        photoURL: profile?.photoURL ?? null,
       };
     });
   },
@@ -621,6 +622,7 @@ export const familyRepository: FamilyRepository = {
     const profile: Record<string, unknown> = {
       displayName: member.displayName ?? null,
       email: member.email ?? null,
+      photoURL: member.photoURL ?? null,
       updatedAt: serverTimestamp(),
     };
     if (!existing.exists()) {

@@ -28,8 +28,10 @@ import { NavLink, Outlet, type To } from 'react-router-dom';
 
 import { useAuth } from '../state/AuthProvider';
 import { useFamily } from '../state/FamilyProvider';
+import { usePrivacy } from '../state/PrivacyProvider';
 import { useConnectivity } from '../state/useConnectivity';
 import { usePwaStatus } from '../state/usePwaStatus';
+import { Avatar } from './Avatar';
 import { InstallInstructions } from './InstallInstructions';
 import { InstallPrompt } from './InstallPrompt';
 
@@ -57,9 +59,16 @@ const NAV_LINKS: ReadonlyArray<{
 }> = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
   { to: '/expenses', label: 'Transactions', icon: 'receipt_long' },
-  { to: '/add', label: 'Add expense', icon: 'add_circle' },
+  { to: '/insights', label: 'Insights', icon: 'leaderboard' },
+  { to: '/recurring', label: 'Recurring', icon: 'autorenew' },
+  { to: '/add', label: 'Add', icon: 'add_circle' },
   { to: '/settings', label: 'Family', icon: 'group' },
 ];
+
+/** Subset of {@link NAV_LINKS} shown in the mobile bottom nav (kept uncrowded). */
+const BOTTOM_NAV_LINKS = NAV_LINKS.filter((link) =>
+  ['/', '/expenses', '/add', '/insights', '/settings'].includes(String(link.to)),
+);
 
 /** Shared className for a desktop sidebar nav link, depending on active state. */
 function sidebarLinkClass(isActive: boolean): string {
@@ -86,8 +95,9 @@ function bottomLinkClass(isActive: boolean): string {
  * @see useAuth for the member label and sign-out action it surfaces.
  */
 export function AppShell({ children, isOffline }: AppShellProps): JSX.Element {
-  const { memberLabel, signOut } = useAuth();
+  const { member, memberLabel, signOut } = useAuth();
   const { migrationFailures, dismissMigrationFailures } = useFamily();
+  const { isPrivate, toggle: togglePrivacy } = usePrivacy();
   const connectivity = useConnectivity();
   const { offlineCapabilitiesUnavailable } = usePwaStatus();
 
@@ -150,16 +160,34 @@ export function AppShell({ children, isOffline }: AppShellProps): JSX.Element {
           </span>
 
           <div className="flex items-center gap-3 md:gap-4 ml-auto">
+            {/* Privacy mode: blur monetary amounts on screen (presentation-only). */}
+            <button
+              type="button"
+              onClick={togglePrivacy}
+              aria-pressed={isPrivate}
+              data-testid="privacy-toggle"
+              title={isPrivate ? 'Show amounts' : 'Hide amounts'}
+              className="btn-ghost px-3 py-2 text-sm flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-base" aria-hidden="true">
+                {isPrivate ? 'visibility_off' : 'visibility'}
+              </span>
+              <span className="hidden sm:inline">{isPrivate ? 'Private' : 'Privacy'}</span>
+            </button>
             {/* Install affordance, shown only when the app is installable (Req 5.4). */}
             <InstallPrompt />
             {/* Cross-platform manual install steps (covers iOS Safari etc., Req 5.4). */}
             <InstallInstructions />
-            {/* Resolved member label: displayName ?? email ?? 'Signed in' (Req 1.5). */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-high/40 border border-outline-variant/20">
-              <span className="material-symbols-outlined text-primary-container text-lg" aria-hidden="true">
-                account_circle
-              </span>
-              <span data-testid="member-label" className="text-sm text-on-surface max-w-[12rem] truncate">
+            {/* Resolved member identity: avatar + label (Req 1.5). */}
+            <div className="flex items-center gap-2 px-2 py-1 rounded-full bg-surface-container-high/40 border border-outline-variant/20">
+              <Avatar
+                photoURL={member?.photoURL ?? null}
+                displayName={member?.displayName ?? null}
+                email={member?.email ?? null}
+                size={28}
+                ring={false}
+              />
+              <span data-testid="member-label" className="text-sm text-on-surface max-w-[12rem] truncate pr-1">
                 {memberLabel ?? 'Signed in'}
               </span>
             </div>
@@ -172,7 +200,7 @@ export function AppShell({ children, isOffline }: AppShellProps): JSX.Element {
               <span className="material-symbols-outlined text-base" aria-hidden="true">
                 logout
               </span>
-              Sign out
+              <span className="hidden sm:inline">Sign out</span>
             </button>
           </div>
         </header>
@@ -238,7 +266,7 @@ export function AppShell({ children, isOffline }: AppShellProps): JSX.Element {
         aria-label="Primary"
         className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-stretch bg-surface-container-lowest/95 backdrop-blur-xl border-t border-outline-variant/30"
       >
-        {NAV_LINKS.map(({ to, label, icon, end }) => (
+        {BOTTOM_NAV_LINKS.map(({ to, label, icon, end }) => (
           <NavLink
             key={label}
             to={to}

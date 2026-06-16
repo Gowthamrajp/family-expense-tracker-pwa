@@ -107,6 +107,16 @@ service cloud.firestore {
         allow create, update: if isMember(familyId) && request.auth.uid == uid;
         allow delete: if false;
       }
+      // Recurring-payment rules: family-scoped templates that the client
+      // materializes into expenses on app open. Members of the family may
+      // read and manage them; create requires the rule be attributed to the
+      // caller. Cross-family/unauthenticated access is denied by isMember.
+      match /recurringRules/{ruleId} {
+        allow read: if isMember(familyId);
+        allow create: if isMember(familyId)
+                      && request.resource.data.createdBy == request.auth.uid;
+        allow update, delete: if isMember(familyId);
+      }
     }
 
     // TRANSITIONAL (legacy MVP data): the MVP stored expenses in a single
