@@ -243,20 +243,20 @@ function ExpenseListRow({
             </span>
           )}
         </div>
-        {/* Line 2: source (with icon) + sub-source + recorded-by. */}
+        {/* Line 2: source icon + (sub-source name, else source name) + recorder. */}
         <div className="flex items-center gap-1.5 flex-wrap text-xs text-on-surface-variant mt-0.5">
           <span data-testid="expense-source" className="inline-flex items-center gap-1">
-            <span className="material-symbols-outlined text-[14px]" aria-hidden="true">
+            <span
+              className="material-symbols-outlined text-[15px]"
+              aria-hidden="true"
+              title={sourceName}
+            >
               {sourceIcon(sourceName)}
             </span>
-            {sourceName}
+            <span data-testid="expense-subsource" className="truncate">
+              {subSourceNickname ?? sourceName}
+            </span>
           </span>
-          {subSourceNickname !== undefined && (
-            <>
-              <span aria-hidden="true">•</span>
-              <span data-testid="expense-subsource" className="truncate">{subSourceNickname}</span>
-            </>
-          )}
           <span data-testid="expense-recordedby" className="opacity-70 italic">
             · {recordedByName}
           </span>
@@ -579,7 +579,7 @@ export function ExpenseList({
       */}
       {editing !== null && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/70 backdrop-blur-sm p-4"
           onClick={(event) => {
             // Dismiss only when the backdrop itself is clicked, not the dialog.
             if (event.target === event.currentTarget) {
@@ -659,6 +659,16 @@ function TransactionDetailsDrawer({
 }: TransactionDetailsDrawerProps): JSX.Element {
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Lock background page scroll while the drawer is open so the page behind
+  // doesn't scroll and there's no double-scroll. Restored on close/unmount.
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
   const handleDelete = useCallback(async () => {
     setIsDeleting(true);
     try {
@@ -670,7 +680,7 @@ function TransactionDetailsDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] flex justify-end bg-black/70 backdrop-blur-sm"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
@@ -682,8 +692,10 @@ function TransactionDetailsDrawer({
         aria-modal="true"
         aria-label="Transaction details"
         data-testid="expense-details-drawer"
-        className="w-full max-w-md h-full overflow-y-auto custom-scrollbar bg-surface-container-lowest border-l border-outline-variant/30 p-6 flex flex-col gap-6"
+        className="w-full max-w-md h-full flex flex-col bg-surface-container-lowest border-l border-outline-variant/30"
       >
+        {/* Scrollable content area. */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 md:p-6 flex flex-col gap-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <span className="shrink-0 w-11 h-11 rounded-lg bg-primary-container/10 flex items-center justify-center text-primary-container">
@@ -755,8 +767,11 @@ function TransactionDetailsDrawer({
             <p className="text-on-surface-variant/60 italic">No notes.</p>
           )}
         </section>
+        </div>
 
-        <div className="mt-auto flex gap-3">
+        {/* Sticky action footer: always visible at the bottom of the drawer,
+            so Edit/Delete are reachable without scrolling on small screens. */}
+        <div className="shrink-0 flex gap-3 p-4 border-t border-outline-variant/20 bg-surface-container-lowest">
           <button
             type="button"
             onClick={() => onEdit(expense)}
