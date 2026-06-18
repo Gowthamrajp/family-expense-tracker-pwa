@@ -32,7 +32,22 @@ const FIELD_CLASS = 'flex flex-col gap-1.5 text-left text-sm text-on-surface-var
 
 /** Human label for a frequency. */
 function frequencyLabel(frequency: RecurringFrequency): string {
-  return frequency === 'weekly' ? 'Weekly' : 'Monthly';
+  switch (frequency) {
+    case 'daily':
+      return 'Daily';
+    case 'weekly':
+      return 'Weekly';
+    case 'monthly':
+      return 'Monthly';
+    case 'bimonthly':
+      return 'Every 2 months';
+    case 'quarterly':
+      return 'Quarterly';
+    case 'half-yearly':
+      return 'Half-yearly';
+    case 'yearly':
+      return 'Yearly';
+  }
 }
 
 /** Format a Date as a readable day (e.g. "Jan 5, 2025"). */

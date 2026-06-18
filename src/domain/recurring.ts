@@ -24,26 +24,45 @@ function isAfter(a: Date, b: Date): boolean {
   return atMidnight(a).getTime() > atMidnight(b).getTime();
 }
 
+/** Day-based step for each frequency, or null when it is month-based. */
+const DAY_STEP: Partial<Record<RecurringFrequency, number>> = {
+  daily: 1,
+  weekly: 7,
+};
+
+/** Month-based step for each frequency, or null when it is day-based. */
+const MONTH_STEP: Partial<Record<RecurringFrequency, number>> = {
+  monthly: 1,
+  bimonthly: 2,
+  quarterly: 3,
+  'half-yearly': 6,
+  yearly: 12,
+};
+
 /**
  * Advance a date by one period of the given frequency.
  *
- * - `weekly`: +7 days.
- * - `monthly`: +1 calendar month, clamped to the last valid day of the target
- *   month (so a rule starting on the 31st falls back to the 30th/28th in
- *   shorter months rather than overflowing into the next month).
+ * - Day-based (`daily` +1 day, `weekly` +7 days): straightforward day math.
+ * - Month-based (`monthly` +1, `bimonthly` +2, `quarterly` +3,
+ *   `half-yearly` +6, `yearly` +12 months): the day-of-month is clamped to the
+ *   last valid day of the target month (so a rule starting on the 31st falls
+ *   back to the 30th/28th in shorter months rather than overflowing into the
+ *   next month).
  */
 export function advance(date: Date, frequency: RecurringFrequency): Date {
-  if (frequency === 'weekly') {
-    const next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 7);
-    return next;
+  const dayStep = DAY_STEP[frequency];
+  if (dayStep !== undefined) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate() + dayStep);
   }
-  // monthly: clamp the day to the target month's length.
+
+  const monthStep = MONTH_STEP[frequency] ?? 1;
   const year = date.getFullYear();
   const month = date.getMonth();
   const day = date.getDate();
-  const targetMonthLastDay = new Date(year, month + 2, 0).getDate();
+  // Last day of the target month: day 0 of the month AFTER the target.
+  const targetMonthLastDay = new Date(year, month + monthStep + 1, 0).getDate();
   const clampedDay = Math.min(day, targetMonthLastDay);
-  return new Date(year, month + 1, clampedDay);
+  return new Date(year, month + monthStep, clampedDay);
 }
 
 /**

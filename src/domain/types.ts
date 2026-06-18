@@ -320,12 +320,24 @@ export interface SubSourceDocument {
 /**
  * How often a {@link RecurringRule} generates an Expense. Fixed enumeration.
  */
-export type RecurringFrequency = 'weekly' | 'monthly';
+export type RecurringFrequency =
+  | 'daily'
+  | 'weekly'
+  | 'monthly'
+  | 'bimonthly'
+  | 'quarterly'
+  | 'half-yearly'
+  | 'yearly';
 
 /** All valid {@link RecurringFrequency} values, useful for selects. */
 export const RECURRING_FREQUENCIES: readonly RecurringFrequency[] = [
+  'daily',
   'weekly',
   'monthly',
+  'bimonthly',
+  'quarterly',
+  'half-yearly',
+  'yearly',
 ] as const;
 
 /**
