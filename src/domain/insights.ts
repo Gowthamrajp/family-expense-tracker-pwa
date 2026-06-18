@@ -26,6 +26,32 @@ export function monthKey(date: Date): string {
   return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}`;
 }
 
+/** Format a date as a "YYYY" year key. */
+export function yearKey(date: Date): string {
+  return date.getFullYear().toString().padStart(4, '0');
+}
+
+/** The "YYYY" key for the calendar year containing `date`. */
+export function currentYearKey(date: Date): string {
+  return yearKey(date);
+}
+
+/** The "YYYY" key for the year immediately before the one containing `date`. */
+export function previousYearKey(date: Date): string {
+  return (date.getFullYear() - 1).toString().padStart(4, '0');
+}
+
+/** Sum (in rupees) of expenses whose date falls in the given year key. */
+export function totalForYear(expenses: Expense[], key: string): number {
+  let cents = 0;
+  for (const expense of expenses) {
+    if (yearKey(expense.date) === key) {
+      cents += toCents(expense.amount);
+    }
+  }
+  return fromCents(cents);
+}
+
 /** The "YYYY-MM" key for the calendar month containing `date`. */
 export function currentMonthKey(date: Date): string {
   return monthKey(date);

@@ -34,6 +34,7 @@ import { useSources } from '../state/useSources';
 import { useSubCategories } from '../state/useSubCategories';
 import { useSubSources } from '../state/useSubSources';
 import { Loader } from './Loader';
+import { BudgetManager } from './BudgetManager';
 
 const CATEGORY_REQUIRED_MESSAGE = 'Enter a category name.';
 const CATEGORY_DUPLICATE_MESSAGE = 'That category already exists.';
@@ -116,6 +117,7 @@ export function FamilySettings(): JSX.Element {
         isOwner={isOwner}
         onRemoveMember={removeMember}
       />
+      <BudgetManager familyId={familyId} />
       <CategoryManager familyId={familyId} />
       <SourceManager familyId={familyId} />
     </main>

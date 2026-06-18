@@ -120,8 +120,15 @@ service cloud.firestore {
         allow read: if isMember(familyId);
         allow create, update, delete: if isMember(familyId);
       }
-      // Member_Profile: any member may read every profile in their family so
-      // the member list can show readable names (Req 2.6, 2.9); a member may
+      // Family settings (currently the monthly budget): a single
+      // `settings/{key}` document set, family-scoped. Members may read and
+      // manage it. The budget carries no card/PII data so no field allowlist
+      // is required beyond family membership (Req 9.1–9.4).
+      match /settings/{settingId} {
+        allow read: if isMember(familyId);
+        allow create, update, delete: if isMember(familyId);
+      }
+      // Member_Profile: any member may read every profile in their family so      // the member list can show readable names (Req 2.6, 2.9); a member may
       // write ONLY their own profile document (Req 2.7, 2.8). Cross-family and
       // other-member writes are denied, preserving isolation.
       match /members/{uid} {

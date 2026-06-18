@@ -330,6 +330,39 @@ export interface CategoryDocument {
   name: string;
 }
 
+/**
+ * How a family's monthly budget target is expressed:
+ * - `amount`: a fixed rupee cap per month.
+ * - `percent`: a percentage of the PREVIOUS month's total spend.
+ */
+export type BudgetMode = 'amount' | 'percent';
+
+/**
+ * A family's single, rolling monthly budget. Applies to every calendar month.
+ * Stored at `families/{familyId}/settings/budget`. Exactly one of
+ * `amount`/`percent` is meaningful depending on `mode`.
+ */
+export interface Budget {
+  mode: BudgetMode;
+  /** Fixed monthly rupee cap, when `mode === 'amount'`. */
+  amount?: number;
+  /** Percent of previous month's spend, when `mode === 'percent'`. */
+  percent?: number;
+  /** Uid of the member who last set the budget. */
+  updatedBy: string;
+  /** When the budget was last updated. */
+  updatedAt: Date;
+}
+
+/** Document shape stored at `families/{familyId}/settings/budget`. */
+export interface BudgetDocument {
+  mode: BudgetMode;
+  amount?: number;
+  percent?: number;
+  updatedBy: string;
+  updatedAt: FirestoreTimestamp;
+}
+
 /** Document shape stored at `families/{familyId}/subSources/{subSourceId}`. */
 export interface SubSourceDocument {
   source: string;

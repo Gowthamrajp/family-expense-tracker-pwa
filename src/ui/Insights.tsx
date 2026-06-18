@@ -29,9 +29,15 @@ import {
   categoryShares,
   computeDelta,
   currentMonthKey,
+  currentYearKey,
   previousMonthKey,
+  previousYearKey,
   totalForMonth,
+  totalForYear,
 } from '../domain/insights';
+import { computeBudgetStatus, effectiveMonthlyLimit } from '../domain/budget';
+import { useAuth } from '../state/AuthProvider';
+import { useBudget } from '../state/useBudget';
 import { useCategories } from '../state/useCategories';
 import { useExpenses } from '../state/useExpenses';
 import { useSubCategories } from '../state/useSubCategories';
@@ -39,6 +45,7 @@ import { useSubSources } from '../state/useSubSources';
 import { Money, formatINR } from './Money';
 import { Loader } from './Loader';
 import { CategoryDetail } from './CategoryDetail';
+import { BudgetProgressCard } from './BudgetProgressCard';
 
 /** Neon-cyan accent and a small palette for the donut slices. */
 const SLICE_COLORS = [
@@ -95,15 +102,20 @@ export function Insights({
   familyId = null,
   active = true,
 }: InsightsProps = {}): JSX.Element {
+  const { member } = useAuth();
   const { expenses, status, retry } = useExpenses(familyId, active);
   const { categories } = useCategories(familyId);
   const { subCategories } = useSubCategories(familyId);
   const { subSources } = useSubSources(familyId);
+  const { budget } = useBudget(familyId, member);
 
   // Drill-down target: the category the member tapped, or null when closed.
   const [selectedCategory, setSelectedCategory] = useState<
     { id: string | null; name: string } | null
   >(null);
+
+  // Whether the hero comparison is month-over-month or year-over-year.
+  const [comparePeriod, setComparePeriod] = useState<'month' | 'year'>('month');
 
   const today = new Date();
   const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
@@ -120,7 +132,26 @@ export function Insights({
   const prevKey = previousMonthKey(today);
   const currentTotal = totalForMonth(expenses, curKey);
   const previousTotal = totalForMonth(expenses, prevKey);
-  const delta = computeDelta(currentTotal, previousTotal);
+
+  // Year-over-year figures for the alternate comparison mode.
+  const curYearKey = currentYearKey(today);
+  const prevYearKey = previousYearKey(today);
+  const currentYearTotal = totalForYear(expenses, curYearKey);
+  const previousYearTotal = totalForYear(expenses, prevYearKey);
+
+  // The hero adapts to the selected comparison period.
+  const isYear = comparePeriod === 'year';
+  const heroCurrent = isYear ? currentYearTotal : currentTotal;
+  const heroPrevious = isYear ? previousYearTotal : previousTotal;
+  const heroKey = isYear ? curYearKey : curKey;
+  const heroPrevKey = isYear ? prevYearKey : prevKey;
+  const delta = computeDelta(heroCurrent, heroPrevious);
+
+  // Monthly budget: derive the effective limit from the previous month's spend
+  // (percent mode) or the fixed amount, then current-month progress.
+  const budgetLimit =
+    budget === null ? null : effectiveMonthlyLimit(budget, previousTotal);
+  const budgetProgress = computeBudgetStatus(currentTotal, budgetLimit);
 
   // Group by categoryId (resolved to a name) so renames/legacy strings never
   // fragment a category; expenses without a category collapse to "Uncategorized".
@@ -185,23 +216,64 @@ export function Insights({
 
       {hasExpenses && (
         <div className="grid grid-cols-12 gap-grid_gap">
-          {/* Hero: this month's total + MoM delta. */}
+          {/* Monthly budget progress (Req: budget reflected in insights). */}
+          <BudgetProgressCard
+            budget={budget}
+            progress={budgetProgress}
+            currentTotal={currentTotal}
+            previousTotal={previousTotal}
+            monthKey={curKey}
+          />
+
+          {/* Hero: current-period total + MoM/YoY delta with a period toggle. */}
           <div className="col-span-12 lg:col-span-7 glass-card glass-card-hover p-card_padding relative overflow-hidden">
-            <h2 className="text-label-caps uppercase text-on-surface-variant mb-2">
-              This month ({curKey})
-            </h2>
+            <div className="flex items-center justify-between gap-3 mb-2 relative z-10">
+              <h2 className="text-label-caps uppercase text-on-surface-variant">
+                {isYear ? 'This year' : 'This month'} ({heroKey})
+              </h2>
+              {/* Comparison period toggle (mirrors the Stitch pill control). */}
+              <div className="flex bg-surface-container-low rounded-full p-1 border border-outline-variant/20 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setComparePeriod('month')}
+                  data-testid="insights-compare-month"
+                  aria-pressed={!isYear}
+                  className={`px-3 py-1 rounded-full text-[11px] font-label-caps uppercase tracking-wider transition-all ${
+                    !isYear
+                      ? 'bg-primary-container text-on-primary font-bold'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
+                >
+                  Month
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setComparePeriod('year')}
+                  data-testid="insights-compare-year"
+                  aria-pressed={isYear}
+                  className={`px-3 py-1 rounded-full text-[11px] font-label-caps uppercase tracking-wider transition-all ${
+                    isYear
+                      ? 'bg-primary-container text-on-primary font-bold'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
+                >
+                  Year
+                </button>
+              </div>
+            </div>
             <Money
-              amount={currentTotal}
+              amount={heroCurrent}
               testId="insights-current-total"
               className="block text-[clamp(36px,7vw,56px)] leading-none font-extrabold tracking-tighter text-white neon-glow"
             />
             <div className="mt-3 flex items-center gap-2">
               <DeltaBadge percent={delta.percent} />
               <span className="text-sm text-on-surface-variant">
-                vs last month ({formatINR(previousTotal)})
+                vs {isYear ? 'last year' : 'last month'} ({heroPrevKey} ·{' '}
+                {formatINR(heroPrevious)})
               </span>
             </div>
-            <span className="material-symbols-outlined absolute right-6 top-6 text-primary-container/30 text-5xl" aria-hidden="true">
+            <span className="material-symbols-outlined absolute right-6 top-6 text-primary-container/30 text-5xl pointer-events-none" aria-hidden="true">
               trending_up
             </span>
           </div>
