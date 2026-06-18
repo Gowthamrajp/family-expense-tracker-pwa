@@ -407,6 +407,7 @@ export function Insights({
       {/* Per-category drill-down overlay (category → sub-category insights). */}
       {selectedCategory !== null && (
         <CategoryDetail
+          familyId={familyId}
           categoryId={selectedCategory.id}
           categoryName={selectedCategory.name}
           expenses={expenses}

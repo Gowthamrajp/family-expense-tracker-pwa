@@ -5,8 +5,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BUDGET_WARNING_FRACTION,
+  categoryBudgetDocId,
   computeBudgetStatus,
+  effectiveLimit,
   effectiveMonthlyLimit,
+  scopedTotalForMonth,
+  subCategoryBudgetDocId,
   validateBudgetValue,
 } from './budget';
 import type { Budget } from './types';
@@ -122,5 +126,73 @@ describe('computeBudgetStatus', () => {
       state: 'under',
       fraction: null,
     });
+  });
+});
+
+describe('effectiveLimit', () => {
+  it('returns the fixed amount in amount mode', () => {
+    expect(effectiveLimit('amount', 5000, undefined, 9999)).toBe(5000);
+  });
+
+  it('returns null for a non-positive/absent amount', () => {
+    expect(effectiveLimit('amount', 0, undefined, 100)).toBeNull();
+    expect(effectiveLimit('amount', undefined, undefined, 100)).toBeNull();
+  });
+
+  it('computes a percentage of the previous-scope total', () => {
+    expect(effectiveLimit('percent', undefined, 50, 4000)).toBe(2000);
+  });
+
+  it('returns null for a non-positive/absent percent', () => {
+    expect(effectiveLimit('percent', undefined, 0, 100)).toBeNull();
+    expect(effectiveLimit('percent', undefined, undefined, 100)).toBeNull();
+  });
+});
+
+describe('scoped budget doc ids', () => {
+  it('prefixes category and sub-category ids distinctly', () => {
+    expect(categoryBudgetDocId('abc')).toBe('cat_abc');
+    expect(subCategoryBudgetDocId('abc')).toBe('sub_abc');
+  });
+});
+
+describe('scopedTotalForMonth', () => {
+  const monthKeyOf = (d: Date): string =>
+    `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+  const expenses = [
+    { amount: 100, date: new Date(2026, 5, 3), categoryId: 'food', subCategoryId: 'dining' },
+    { amount: 50, date: new Date(2026, 5, 10), categoryId: 'food', subCategoryId: 'groceries' },
+    { amount: 25, date: new Date(2026, 5, 12), categoryId: 'travel' },
+    { amount: 999, date: new Date(2026, 4, 1), categoryId: 'food', subCategoryId: 'dining' },
+  ];
+
+  it('sums a category scope within the month', () => {
+    const total = scopedTotalForMonth(
+      expenses,
+      monthKeyOf,
+      '2026-06',
+      (e) => e.categoryId === 'food',
+    );
+    expect(total).toBeCloseTo(150, 2);
+  });
+
+  it('sums a sub-category scope within the month', () => {
+    const total = scopedTotalForMonth(
+      expenses,
+      monthKeyOf,
+      '2026-06',
+      (e) => e.subCategoryId === 'dining',
+    );
+    expect(total).toBeCloseTo(100, 2);
+  });
+
+  it('excludes other months', () => {
+    const total = scopedTotalForMonth(
+      expenses,
+      monthKeyOf,
+      '2026-05',
+      (e) => e.categoryId === 'food',
+    );
+    expect(total).toBeCloseTo(999, 2);
   });
 });

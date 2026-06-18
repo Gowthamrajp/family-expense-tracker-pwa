@@ -30,6 +30,10 @@ import {
 } from 'recharts';
 
 import {
+  computeBudgetStatus,
+  effectiveLimit,
+} from '../domain/budget';
+import {
   computeDelta,
   currentMonthKey,
   previousMonthKey,
@@ -37,6 +41,8 @@ import {
 } from '../domain/insights';
 import { totalAmount } from '../domain/aggregation';
 import { resolveLabels } from '../domain/expenseMapper';
+import { useAuth } from '../state/AuthProvider';
+import { useScopedBudgets } from '../state/useScopedBudgets';
 import type {
   Expense,
   FamilyCategory,
@@ -115,6 +121,8 @@ interface SubScope {
 
 /** Props for {@link CategoryDetail}. */
 export interface CategoryDetailProps {
+  /** Active family id (for resolving scoped budgets), or null. */
+  familyId?: string | null;
   /** Category id to scope to, or null for the "Uncategorized" bucket. */
   categoryId: string | null;
   /** Display name of the scoped category. */
@@ -161,6 +169,7 @@ function subCategorySlices(
  * one level deeper, a single sub-category.
  */
 export function CategoryDetail({
+  familyId = null,
   categoryId,
   categoryName,
   expenses,
@@ -239,6 +248,43 @@ export function CategoryDetail({
   const currentTotal = totalForMonth(scoped, curKey);
   const previousTotal = totalForMonth(scoped, prevKey);
   const delta = computeDelta(currentTotal, previousTotal);
+
+  // Resolve the budget for the active scope (the category, or a sub-category
+  // when drilled in) and compute this-month progress against it.
+  const { member } = useAuth();
+  const { forCategory: budgetForCategory, forSubCategory: budgetForSubCategory } =
+    useScopedBudgets(familyId, member);
+  const scopeBudget =
+    subScope === null
+      ? categoryId !== null
+        ? budgetForCategory(categoryId)
+        : null
+      : subScope.id !== null
+        ? budgetForSubCategory(subScope.id)
+        : null;
+  const budgetLimit =
+    scopeBudget === null
+      ? null
+      : effectiveLimit(
+          scopeBudget.mode,
+          scopeBudget.amount,
+          scopeBudget.percent,
+          previousTotal,
+        );
+  const budgetStatus = computeBudgetStatus(currentTotal, budgetLimit);
+  const hasBudget = budgetLimit !== null && budgetLimit > 0;
+  const budgetBarColor =
+    budgetStatus.state === 'over'
+      ? 'bg-error'
+      : budgetStatus.state === 'warning'
+        ? 'bg-amber-400'
+        : 'bg-primary-container';
+  const budgetTextColor =
+    budgetStatus.state === 'over'
+      ? 'text-error'
+      : budgetStatus.state === 'warning'
+        ? 'text-amber-400'
+        : 'text-primary-container';
 
   const rows = useMemo(
     () =>
@@ -365,6 +411,49 @@ export function CategoryDetail({
               <p className="text-xs text-on-surface-variant -mt-1">
                 vs {formatINR(previousTotal)} last month ({prevKey})
               </p>
+            )}
+
+            {/* This scope's monthly budget progress, when one is set. */}
+            {hasBudget && (
+              <div
+                className="flex flex-col gap-1.5 pt-3 border-t border-outline-variant/15"
+                data-testid="category-detail-budget"
+              >
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-on-surface-variant">Monthly budget</span>
+                  <span className="font-mono-data text-on-surface">
+                    {formatINR(currentTotal)}{' '}
+                    <span className="text-on-surface-variant">
+                      / {formatINR(budgetStatus.limit ?? 0)}
+                    </span>
+                  </span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-surface-container-highest overflow-hidden">
+                  <div
+                    data-testid="category-detail-budget-bar"
+                    className={`h-full rounded-full transition-[width] duration-500 ${budgetBarColor}`}
+                    style={{
+                      width: `${
+                        budgetStatus.fraction === null
+                          ? 0
+                          : Math.min(budgetStatus.fraction * 100, 100)
+                      }%`,
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className={budgetTextColor}>
+                    {budgetStatus.fraction !== null
+                      ? `${(budgetStatus.fraction * 100).toFixed(0)}% used`
+                      : ''}
+                  </span>
+                  <span className="text-on-surface-variant">
+                    {budgetStatus.remaining !== null && budgetStatus.remaining >= 0
+                      ? `${formatINR(budgetStatus.remaining)} left`
+                      : `${formatINR(currentTotal - (budgetStatus.limit ?? 0))} over`}
+                  </span>
+                </div>
+              </div>
             )}
           </div>
 

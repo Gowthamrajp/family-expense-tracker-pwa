@@ -128,6 +128,13 @@ service cloud.firestore {
         allow read: if isMember(familyId);
         allow create, update, delete: if isMember(familyId);
       }
+      // Scoped budgets: per-category and per-sub-category monthly caps stored
+      // under `budgets/{id}`. Family-scoped; members may read and manage them.
+      // No card/PII data, so membership is the only gate (Req 9.1–9.4).
+      match /budgets/{budgetId} {
+        allow read: if isMember(familyId);
+        allow create, update, delete: if isMember(familyId);
+      }
       // Member_Profile: any member may read every profile in their family so      // the member list can show readable names (Req 2.6, 2.9); a member may
       // write ONLY their own profile document (Req 2.7, 2.8). Cross-family and
       // other-member writes are denied, preserving isolation.

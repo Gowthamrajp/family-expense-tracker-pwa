@@ -363,6 +363,58 @@ export interface BudgetDocument {
   updatedAt: FirestoreTimestamp;
 }
 
+/**
+ * What a {@link ScopedBudget} applies to:
+ * - `category`: a monthly cap for one {@link FamilyCategory}.
+ * - `subCategory`: a monthly cap for one {@link SubCategory} within a category.
+ *
+ * The family-wide ("global") budget is the separate {@link Budget} stored at
+ * `settings/budget`; it is not a scoped budget.
+ */
+export type BudgetScopeType = 'category' | 'subCategory';
+
+/**
+ * A monthly budget targeted at a single category or sub-category. Stored under
+ * `families/{familyId}/budgets/{id}` where the document id encodes the scope
+ * (`cat_{categoryId}` or `sub_{subCategoryId}`) so a scope has at most one
+ * budget. Shares {@link BudgetMode} semantics with the global {@link Budget}:
+ * in `percent` mode the cap is a percentage of that scope's PREVIOUS-month
+ * spend.
+ */
+export interface ScopedBudget {
+  /** Stable document id encoding the scope (e.g. `cat_<id>`, `sub_<id>`). */
+  id: string;
+  scopeType: BudgetScopeType;
+  /**
+   * The targeted id: a {@link FamilyCategory} id when `scopeType` is
+   * `category`, or a {@link SubCategory} id when `scopeType` is `subCategory`.
+   */
+  scopeId: string;
+  /** For a `subCategory` budget, the parent {@link FamilyCategory} id. */
+  parentCategoryId?: string;
+  mode: BudgetMode;
+  /** Fixed monthly rupee cap, when `mode === 'amount'`. */
+  amount?: number;
+  /** Percent of the scope's previous-month spend, when `mode === 'percent'`. */
+  percent?: number;
+  /** Uid of the member who last set this scoped budget. */
+  updatedBy: string;
+  /** When this scoped budget was last updated. */
+  updatedAt: Date;
+}
+
+/** Document shape stored at `families/{familyId}/budgets/{id}`. */
+export interface ScopedBudgetDocument {
+  scopeType: BudgetScopeType;
+  scopeId: string;
+  parentCategoryId?: string;
+  mode: BudgetMode;
+  amount?: number;
+  percent?: number;
+  updatedBy: string;
+  updatedAt: FirestoreTimestamp;
+}
+
 /** Document shape stored at `families/{familyId}/subSources/{subSourceId}`. */
 export interface SubSourceDocument {
   source: string;

@@ -87,15 +87,58 @@ export function effectiveMonthlyLimit(
   budget: Budget,
   previousMonthTotal: number,
 ): number | null {
-  if (budget.mode === 'amount') {
-    return budget.amount !== undefined && budget.amount > 0
-      ? budget.amount
-      : null;
+  return effectiveLimit(budget.mode, budget.amount, budget.percent, previousMonthTotal);
+}
+
+/**
+ * Shared effective-limit derivation used by both the global {@link Budget} and
+ * scoped budgets. In `amount` mode returns the fixed amount; in `percent` mode
+ * returns `previousTotal * percent / 100`. Returns `null` when the value for
+ * the mode is missing or non-positive.
+ */
+export function effectiveLimit(
+  mode: BudgetMode,
+  amount: number | undefined,
+  percent: number | undefined,
+  previousTotal: number,
+): number | null {
+  if (mode === 'amount') {
+    return amount !== undefined && amount > 0 ? amount : null;
   }
-  if (budget.percent === undefined || budget.percent <= 0) {
+  if (percent === undefined || percent <= 0) {
     return null;
   }
-  return fromPaise(Math.round(toPaise(previousMonthTotal) * (budget.percent / 100)));
+  return fromPaise(Math.round(toPaise(previousTotal) * (percent / 100)));
+}
+
+/** Build the stable `budgets/{id}` document id for a category-scoped budget. */
+export function categoryBudgetDocId(categoryId: string): string {
+  return `cat_${categoryId}`;
+}
+
+/** Build the stable `budgets/{id}` document id for a sub-category budget. */
+export function subCategoryBudgetDocId(subCategoryId: string): string {
+  return `sub_${subCategoryId}`;
+}
+
+/**
+ * Sum (in rupees) of the expenses matching `predicate` whose date falls in the
+ * given "YYYY-MM" month key. Cents-accurate. Used to compute per-category and
+ * per-sub-category spend for scoped budgets.
+ */
+export function scopedTotalForMonth(
+  expenses: { amount: number; date: Date; categoryId?: string; subCategoryId?: string }[],
+  monthKeyOf: (date: Date) => string,
+  key: string,
+  predicate: (e: { categoryId?: string; subCategoryId?: string }) => boolean,
+): number {
+  let paise = 0;
+  for (const e of expenses) {
+    if (monthKeyOf(e.date) === key && predicate(e)) {
+      paise += toPaise(e.amount);
+    }
+  }
+  return fromPaise(paise);
 }
 
 /** Spending state relative to a budget limit. */

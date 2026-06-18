@@ -48,6 +48,7 @@ import {
 import { type Expense, type ExpenseInput, type Source } from '../domain/types';
 import { useAuth } from '../state/AuthProvider';
 import { useBudget } from '../state/useBudget';
+import { useScopedBudgets } from '../state/useScopedBudgets';
 import { useCategories } from '../state/useCategories';
 import { useExpenses } from '../state/useExpenses';
 import { useSources } from '../state/useSources';
@@ -55,10 +56,14 @@ import { useSubCategories } from '../state/useSubCategories';
 import { useSubSources } from '../state/useSubSources';
 import {
   computeBudgetStatus,
+  effectiveLimit,
   effectiveMonthlyLimit,
+  scopedTotalForMonth,
+  type BudgetStatus,
 } from '../domain/budget';
 import {
   currentMonthKey,
+  monthKey,
   previousMonthKey,
   totalForMonth,
 } from '../domain/insights';
@@ -277,6 +282,8 @@ export function ExpenseEntryForm({
   const { sources } = useSources(familyId);
   const { updateExpense, expenses } = useExpenses(familyId);
   const { budget } = useBudget(familyId, member);
+  const { forCategory: budgetForCategory, forSubCategory: budgetForSubCategory } =
+    useScopedBudgets(familyId, member);
 
   const [form, setForm] = useState<FormState>(() =>
     existingExpense !== undefined
@@ -510,36 +517,17 @@ export function ExpenseEntryForm({
     [form.description],
   );
 
-  // Live monthly-budget projection for the transaction being entered. The
-  // budget is a single rolling monthly cap, so we project the CURRENT calendar
-  // month's spend including the amount being typed, and alert if it crosses the
-  // limit. Only transactions dated in the current month affect the projection.
-  const budgetProjection = useMemo(() => {
-    if (budget === null) {
-      return null;
-    }
+  // Live monthly-budget projections for the transaction being entered. Budgets
+  // are rolling monthly caps applied to the CURRENT calendar month. We project
+  // each applicable scope's month spend including the amount being typed — the
+  // global cap, plus the selected category's and sub-category's caps when set —
+  // and alert when any is crossed. Only current-month dates affect the
+  // projection (empty date defaults to today).
+  const budgetProjections = useMemo(() => {
     const today = new Date();
     const curKey = currentMonthKey(today);
-    const prevTotal = totalForMonth(expenses, previousMonthKey(today));
-    const limit = effectiveMonthlyLimit(budget, prevTotal);
-    if (limit === null || limit <= 0) {
-      return null;
-    }
+    const prevKey = previousMonthKey(today);
 
-    // Spend already recorded this month, excluding the expense being edited so
-    // it isn't double-counted against its own new value.
-    let spentThisMonth = 0;
-    for (const expense of expenses) {
-      if (isEditMode && expense.id === existingExpense?.id) {
-        continue;
-      }
-      if (currentMonthKey(expense.date) === curKey) {
-        spentThisMonth += expense.amount;
-      }
-    }
-
-    // The amount being entered only counts toward this month's budget when the
-    // chosen date falls in the current month (empty date defaults to today).
     const enteredAmount = Number(form.amount);
     const enteredDate = form.date === '' ? today : new Date(form.date);
     const countsThisMonth =
@@ -547,11 +535,106 @@ export function ExpenseEntryForm({
       enteredAmount > 0 &&
       !Number.isNaN(enteredDate.getTime()) &&
       currentMonthKey(enteredDate) === curKey;
+    const addAmount = countsThisMonth ? enteredAmount : 0;
 
-    const projected = spentThisMonth + (countsThisMonth ? enteredAmount : 0);
-    const status = computeBudgetStatus(projected, limit);
-    return { limit, spentThisMonth, projected, status, countsThisMonth };
-  }, [budget, expenses, form.amount, form.date, isEditMode, existingExpense]);
+    // Exclude the expense being edited so it isn't double-counted.
+    const excludeId = isEditMode ? existingExpense?.id : undefined;
+    const matching = (predicate: (e: typeof expenses[number]) => boolean) =>
+      expenses.filter((e) => e.id !== excludeId && predicate(e));
+
+    type Projection = {
+      key: string;
+      label: string;
+      limit: number;
+      projected: number;
+      status: BudgetStatus;
+    };
+    const projections: Projection[] = [];
+
+    const pushProjection = (
+      key: string,
+      label: string,
+      limit: number | null,
+      scopePredicate: (e: typeof expenses[number]) => boolean,
+    ): void => {
+      if (limit === null || limit <= 0) {
+        return;
+      }
+      const spent = scopedTotalForMonth(matching(scopePredicate), monthKey, curKey, () => true);
+      const projected = spent + addAmount;
+      projections.push({
+        key,
+        label,
+        limit,
+        projected,
+        status: computeBudgetStatus(projected, limit),
+      });
+    };
+
+    // Global cap.
+    if (budget !== null) {
+      const prevTotal = totalForMonth(expenses, prevKey);
+      pushProjection('global', 'overall', effectiveMonthlyLimit(budget, prevTotal), () => true);
+    }
+
+    // Category cap (only when a category is selected).
+    if (form.category !== '') {
+      const catBudget = budgetForCategory(form.category);
+      if (catBudget !== null) {
+        const catName =
+          categories.find((c) => c.id === form.category)?.name ?? 'this category';
+        const prevCat = scopedTotalForMonth(
+          expenses,
+          monthKey,
+          prevKey,
+          (e) => e.categoryId === form.category,
+        );
+        pushProjection(
+          'category',
+          catName,
+          effectiveLimit(catBudget.mode, catBudget.amount, catBudget.percent, prevCat),
+          (e) => e.categoryId === form.category,
+        );
+      }
+    }
+
+    // Sub-category cap (only when a sub-category is selected).
+    if (form.subCategory !== '') {
+      const subBudget = budgetForSubCategory(form.subCategory);
+      if (subBudget !== null) {
+        const subName =
+          subCategoryOptions.find((s) => s.id === form.subCategory)?.name ??
+          'this sub-category';
+        const prevSub = scopedTotalForMonth(
+          expenses,
+          monthKey,
+          prevKey,
+          (e) => e.subCategoryId === form.subCategory,
+        );
+        pushProjection(
+          'subCategory',
+          subName,
+          effectiveLimit(subBudget.mode, subBudget.amount, subBudget.percent, prevSub),
+          (e) => e.subCategoryId === form.subCategory,
+        );
+      }
+    }
+
+    return projections;
+  }, [
+    budget,
+    budgetForCategory,
+    budgetForSubCategory,
+    expenses,
+    form.amount,
+    form.date,
+    form.category,
+    form.subCategory,
+    categories,
+    subCategoryOptions,
+    isEditMode,
+    existingExpense,
+  ]);
 
   return (
     <div className="p-5 md:px-container_padding md:py-8 flex justify-center">
@@ -593,100 +676,118 @@ export function ExpenseEntryForm({
           )}
         </div>
 
-        {/* Monthly budget alert + contextual progress (Req: alert while adding a
-            transaction when the budget is crossed). Shown only when a budget is
-            set and yields a usable monthly limit. */}
-        {budgetProjection !== null && (
+        {/* Monthly budget alerts + contextual progress (Req: alert while adding
+            a transaction when a budget is crossed). One block per applicable
+            scope — overall, the selected category, and its sub-category — that
+            has a usable monthly limit. */}
+        {budgetProjections.length > 0 && (
           <div className="flex flex-col gap-3" data-testid="budget-alert-block">
-            {budgetProjection.status.state === 'over' && (
-              <div
-                role="alert"
-                data-testid="budget-alert-over"
-                className="bg-error-container/20 border border-error/30 rounded-xl p-4 flex items-start gap-3"
-              >
-                <span
-                  className="material-symbols-outlined text-error mt-0.5"
-                  aria-hidden="true"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
-                >
-                  warning
-                </span>
-                <div className="flex-1 text-sm">
-                  <p className="text-on-surface font-semibold">Over monthly budget</p>
-                  <p className="text-on-surface-variant mt-0.5">
-                    This transaction puts the family{' '}
-                    <span className="text-error font-bold">
-                      {formatINR(budgetProjection.projected - budgetProjection.limit)}
-                    </span>{' '}
-                    over the {formatINR(budgetProjection.limit)} budget this month.
-                  </p>
-                </div>
-              </div>
-            )}
-            {budgetProjection.status.state === 'warning' && (
-              <div
-                role="alert"
-                data-testid="budget-alert-warning"
-                className="bg-amber-400/10 border border-amber-400/30 rounded-xl p-4 flex items-start gap-3"
-              >
-                <span className="material-symbols-outlined text-amber-400 mt-0.5" aria-hidden="true">
-                  warning
-                </span>
-                <div className="flex-1 text-sm">
-                  <p className="text-on-surface font-semibold">Approaching budget</p>
-                  <p className="text-on-surface-variant mt-0.5">
-                    This will use{' '}
-                    <span className="text-amber-400 font-bold">
-                      {budgetProjection.status.fraction !== null
-                        ? `${(budgetProjection.status.fraction * 100).toFixed(0)}%`
-                        : ''}
-                    </span>{' '}
-                    of the {formatINR(budgetProjection.limit)} monthly budget.
-                  </p>
-                </div>
-              </div>
-            )}
-            {/* Contextual monthly progress bar. */}
-            <div className="bg-surface-container-low/50 p-4 rounded-xl border border-outline-variant/10 flex flex-col gap-2">
-              <div className="flex justify-between items-end gap-3">
-                <span className="text-label-caps uppercase text-on-surface-variant text-[11px]">
-                  Monthly budget progress
-                </span>
-                <span className="font-mono-data text-sm text-on-surface">
-                  {formatINR(budgetProjection.projected)}{' '}
-                  <span className="text-on-surface-variant">
-                    / {formatINR(budgetProjection.limit)}
-                  </span>
-                </span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-surface-container-highest overflow-hidden">
+            {budgetProjections.map((proj) => {
+              const over = proj.status.state === 'over';
+              const warning = proj.status.state === 'warning';
+              const scopeLabel =
+                proj.key === 'global' ? 'overall budget' : `${proj.label} budget`;
+              return (
                 <div
-                  data-testid="budget-alert-bar"
-                  className={`h-full rounded-full transition-[width] duration-300 ${
-                    budgetProjection.status.state === 'over'
-                      ? 'bg-error'
-                      : budgetProjection.status.state === 'warning'
-                        ? 'bg-amber-400'
-                        : 'bg-primary-container'
-                  }`}
-                  style={{
-                    width: `${
-                      budgetProjection.status.fraction === null
-                        ? 0
-                        : Math.min(budgetProjection.status.fraction * 100, 100)
-                    }%`,
-                  }}
-                />
-              </div>
-              <p className="text-[11px] text-on-surface-variant text-right">
-                {budgetProjection.status.remaining !== null &&
-                budgetProjection.status.remaining >= 0
-                  ? `Remaining: ${formatINR(budgetProjection.status.remaining)}`
-                  : `Over by: ${formatINR(
-                      budgetProjection.projected - budgetProjection.limit,
-                    )}`}
-              </p>
-            </div>
+                  key={proj.key}
+                  className="flex flex-col gap-2"
+                  data-testid={`budget-alert-${proj.key}`}
+                >
+                  {over && (
+                    <div
+                      role="alert"
+                      data-testid={`budget-alert-${proj.key}-over`}
+                      className="bg-error-container/20 border border-error/30 rounded-xl p-4 flex items-start gap-3"
+                    >
+                      <span
+                        className="material-symbols-outlined text-error mt-0.5"
+                        aria-hidden="true"
+                        style={{ fontVariationSettings: "'FILL' 1" }}
+                      >
+                        warning
+                      </span>
+                      <div className="flex-1 text-sm">
+                        <p className="text-on-surface font-semibold">
+                          Over {scopeLabel}
+                        </p>
+                        <p className="text-on-surface-variant mt-0.5">
+                          This puts the {scopeLabel}{' '}
+                          <span className="text-error font-bold">
+                            {formatINR(proj.projected - proj.limit)}
+                          </span>{' '}
+                          over its {formatINR(proj.limit)} cap this month.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {warning && (
+                    <div
+                      role="alert"
+                      data-testid={`budget-alert-${proj.key}-warning`}
+                      className="bg-amber-400/10 border border-amber-400/30 rounded-xl p-4 flex items-start gap-3"
+                    >
+                      <span className="material-symbols-outlined text-amber-400 mt-0.5" aria-hidden="true">
+                        warning
+                      </span>
+                      <div className="flex-1 text-sm">
+                        <p className="text-on-surface font-semibold">
+                          Approaching {scopeLabel}
+                        </p>
+                        <p className="text-on-surface-variant mt-0.5">
+                          This will use{' '}
+                          <span className="text-amber-400 font-bold">
+                            {proj.status.fraction !== null
+                              ? `${(proj.status.fraction * 100).toFixed(0)}%`
+                              : ''}
+                          </span>{' '}
+                          of the {formatINR(proj.limit)} {scopeLabel}.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {/* Contextual monthly progress bar for this scope. */}
+                  <div className="bg-surface-container-low/50 p-4 rounded-xl border border-outline-variant/10 flex flex-col gap-2">
+                    <div className="flex justify-between items-end gap-3">
+                      <span className="text-label-caps uppercase text-on-surface-variant text-[11px]">
+                        {proj.key === 'global'
+                          ? 'Overall monthly budget'
+                          : `${proj.label} budget`}
+                      </span>
+                      <span className="font-mono-data text-sm text-on-surface">
+                        {formatINR(proj.projected)}{' '}
+                        <span className="text-on-surface-variant">
+                          / {formatINR(proj.limit)}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-surface-container-highest overflow-hidden">
+                      <div
+                        data-testid={`budget-alert-${proj.key}-bar`}
+                        className={`h-full rounded-full transition-[width] duration-300 ${
+                          over
+                            ? 'bg-error'
+                            : warning
+                              ? 'bg-amber-400'
+                              : 'bg-primary-container'
+                        }`}
+                        style={{
+                          width: `${
+                            proj.status.fraction === null
+                              ? 0
+                              : Math.min(proj.status.fraction * 100, 100)
+                          }%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-on-surface-variant text-right">
+                      {proj.status.remaining !== null && proj.status.remaining >= 0
+                        ? `Remaining: ${formatINR(proj.status.remaining)}`
+                        : `Over by: ${formatINR(proj.projected - proj.limit)}`}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
