@@ -111,6 +111,29 @@ function categoryIcon(categoryName: string): string {
   return 'category';
 }
 
+/**
+ * Map common payment-source names to Material Symbols icons; fall back to a
+ * generic wallet icon. Auto-derived from the name (not stored).
+ */
+const SOURCE_ICONS: ReadonlyArray<[RegExp, string]> = [
+  [/cash/i, 'payments'],
+  [/credit|debit|card/i, 'credit_card'],
+  [/reward|point/i, 'stars'],
+  [/coupon|voucher/i, 'confirmation_number'],
+  [/cashback/i, 'savings'],
+  [/bank|account|upi|gpay|pay/i, 'account_balance'],
+  [/wallet/i, 'account_balance_wallet'],
+];
+
+function sourceIcon(sourceName: string): string {
+  for (const [pattern, icon] of SOURCE_ICONS) {
+    if (pattern.test(sourceName)) {
+      return icon;
+    }
+  }
+  return 'account_balance_wallet';
+}
+
 /** Props for {@link ExpenseListRow}. */
 interface ExpenseListRowProps {
   /** Display-ready projection used to render the row's labels (Req 6.2, 6.3). */
@@ -188,16 +211,16 @@ function ExpenseListRow({
   return (
     <li
       data-testid="expense-row"
-      className="glass-card glass-card-hover p-4 flex items-center gap-4"
+      className="glass-card glass-card-hover p-3 md:p-4 flex items-center gap-3 md:gap-4"
     >
       {/* Category icon chip. */}
-      <div className="shrink-0 w-12 h-12 rounded-lg bg-primary-container/10 flex items-center justify-center text-primary-container">
-        <span className="material-symbols-outlined" aria-hidden="true">
+      <div className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-primary-container/10 flex items-center justify-center text-primary-container">
+        <span className="material-symbols-outlined text-[20px] md:text-2xl" aria-hidden="true">
           {categoryIcon(categoryName)}
         </span>
       </div>
 
-      {/* Primary info: category, recorded-by, source/sub-source, description.
+      {/* Primary info: category, sub-category, source/sub-source, description.
           Clicking opens the details drawer. */}
       <button
         type="button"
@@ -206,44 +229,47 @@ function ExpenseListRow({
         aria-label={`View details for ${categoryName} ${formatAmount(amount)}`}
         className="flex-1 min-w-0 text-left"
       >
-        <div className="flex items-center gap-2 flex-wrap">
-          <span data-testid="expense-category" className="font-semibold text-on-surface">
+        {/* Line 1: category name + optional sub-category chip. */}
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span data-testid="expense-category" className="font-semibold text-on-surface truncate">
             {categoryName}
           </span>
           {subCategoryName !== undefined && (
-            <span data-testid="expense-subcategory" className="text-xs px-1.5 py-0.5 rounded bg-primary-container/10 text-primary-container">
+            <span
+              data-testid="expense-subcategory"
+              className="shrink-0 text-[11px] px-1.5 py-0.5 rounded bg-primary-container/10 text-primary-container"
+            >
               {subCategoryName}
             </span>
           )}
-          <span data-testid="expense-recordedby" className="text-xs text-on-surface-variant italic">
-            by {recordedByName}
-          </span>
         </div>
-        <div className="flex items-center gap-2 flex-wrap text-xs text-on-surface-variant mt-0.5">
-          <span data-testid="expense-source">{sourceName}</span>
-          {/*
-            SubSource nickname is shown only when the expense references a known
-            sub-source (Req 6.2). It is omitted entirely otherwise so the row is
-            not cluttered with an empty field.
-          */}
+        {/* Line 2: source (with icon) + sub-source + recorded-by. */}
+        <div className="flex items-center gap-1.5 flex-wrap text-xs text-on-surface-variant mt-0.5">
+          <span data-testid="expense-source" className="inline-flex items-center gap-1">
+            <span className="material-symbols-outlined text-[14px]" aria-hidden="true">
+              {sourceIcon(sourceName)}
+            </span>
+            {sourceName}
+          </span>
           {subSourceNickname !== undefined && (
             <>
               <span aria-hidden="true">•</span>
-              <span data-testid="expense-subsource">{subSourceNickname}</span>
+              <span data-testid="expense-subsource" className="truncate">{subSourceNickname}</span>
             </>
           )}
+          <span data-testid="expense-recordedby" className="opacity-70 italic">
+            · {recordedByName}
+          </span>
         </div>
-        {/*
-          Description is shown when present and left blank when empty (Req 6.3).
-          The element is always rendered so the row layout is stable; its text
-          content is the empty string for descriptionless expenses.
-        */}
-        <span
-          data-testid="expense-description"
-          className="block text-sm text-on-surface-variant mt-1 truncate"
-        >
-          {description}
-        </span>
+        {/* Line 3: description, only when present. */}
+        {description.trim() !== '' && (
+          <span
+            data-testid="expense-description"
+            className="block text-sm text-on-surface-variant mt-0.5 truncate"
+          >
+            {description}
+          </span>
+        )}
       </button>
 
       {/* Amount + date, right aligned. */}
@@ -251,19 +277,19 @@ function ExpenseListRow({
         <Money
           amount={amount}
           testId="expense-amount"
-          className="block font-mono-data text-lg font-semibold text-white"
+          className="block font-mono-data text-base md:text-lg font-semibold text-white"
         />
-        <span data-testid="expense-date" className="block text-xs text-on-surface-variant mt-0.5">
+        <span data-testid="expense-date" className="block text-[11px] md:text-xs text-on-surface-variant mt-0.5">
           {formatDate(date)}
         </span>
       </div>
 
       {/*
-        Per-row Edit/Delete affordances (Req 3.13, 3.17, 3.18, 3.19). Shown on
-        every row regardless of recorder. The Delete control toggles an inline
-        confirmation prompt before removing the expense.
+        Per-row Edit/Delete affordances (Req 3.13, 3.17, 3.18, 3.19). Hidden on
+        phones to keep the row uncramped — tapping the row opens the details
+        drawer, which has Edit/Delete. Shown inline from md upward.
       */}
-      <div className="shrink-0 flex items-center gap-1">
+      <div className="shrink-0 hidden md:flex items-center gap-1">
         {isConfirming ? (
           <>
             <button
@@ -659,11 +685,21 @@ function TransactionDetailsDrawer({
         className="w-full max-w-md h-full overflow-y-auto custom-scrollbar bg-surface-container-lowest border-l border-outline-variant/30 p-6 flex flex-col gap-6"
       >
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-label-caps uppercase text-on-surface-variant">Transaction</p>
-            <h2 className="text-headline-md font-semibold text-on-surface mt-1">
-              {row.categoryName}
-            </h2>
+          <div className="flex items-center gap-3">
+            <span className="shrink-0 w-11 h-11 rounded-lg bg-primary-container/10 flex items-center justify-center text-primary-container">
+              <span className="material-symbols-outlined" aria-hidden="true">
+                {categoryIcon(row.categoryName)}
+              </span>
+            </span>
+            <div>
+              <p className="text-label-caps uppercase text-on-surface-variant">Transaction</p>
+              <h2 className="text-headline-md font-semibold text-on-surface mt-0.5">
+                {row.categoryName}
+                {row.subCategoryName !== undefined && (
+                  <span className="text-on-surface-variant font-normal"> · {row.subCategoryName}</span>
+                )}
+              </h2>
+            </div>
           </div>
           <button
             type="button"
@@ -691,7 +727,12 @@ function TransactionDetailsDrawer({
           )}
           <div className="flex items-center justify-between gap-4">
             <dt className="text-on-surface-variant">Source</dt>
-            <dd className="text-on-surface">{row.sourceName}</dd>
+            <dd className="text-on-surface inline-flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-base text-primary-container" aria-hidden="true">
+                {sourceIcon(row.sourceName)}
+              </span>
+              {row.sourceName}
+            </dd>
           </div>
           {row.subSourceNickname !== undefined && (
             <div className="flex items-center justify-between gap-4">
