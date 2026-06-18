@@ -30,9 +30,10 @@ import {
   previousMonthKey,
   totalForMonth,
 } from '../domain/insights';
-import type { Expense } from '../domain/types';
+import { groupByReference } from '../domain/aggregation';
 import { useCategories } from '../state/useCategories';
 import { useExpenses } from '../state/useExpenses';
+import { useSubCategories } from '../state/useSubCategories';
 import { Money, formatINR } from './Money';
 
 /** Neon-cyan accent and a small palette for the donut slices. */
@@ -92,16 +93,12 @@ export function Insights({
 }: InsightsProps = {}): JSX.Element {
   const { expenses, status, retry } = useExpenses(familyId, active);
   const { categories } = useCategories(familyId);
+  const { subCategories } = useSubCategories(familyId);
 
   const today = new Date();
   const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
-  const labelOf = (expense: Expense): string => {
-    const resolved =
-      expense.categoryId !== undefined
-        ? categoryNameById.get(expense.categoryId)
-        : undefined;
-    return resolved ?? expense.category;
-  };
+  const subCategoryNameById = new Map(subCategories.map((s) => [s.id, s.name]));
+  const categoryLabel = (id: string): string => categoryNameById.get(id) ?? 'Unknown';
 
   const curKey = currentMonthKey(today);
   const prevKey = previousMonthKey(today);
@@ -109,8 +106,30 @@ export function Insights({
   const previousTotal = totalForMonth(expenses, prevKey);
   const delta = computeDelta(currentTotal, previousTotal);
 
-  const shares = categoryShares(expenses, labelOf);
-  const comparison = categoryComparison(expenses, today, labelOf);
+  // Group by categoryId (resolved to a name) so renames/legacy strings never
+  // fragment a category; expenses without a category collapse to "Uncategorized".
+  const shares = categoryShares(
+    expenses,
+    (e) => e.categoryId,
+    categoryLabel,
+    'Uncategorized',
+  );
+  const comparison = categoryComparison(
+    expenses,
+    today,
+    (e) => e.categoryId,
+    categoryLabel,
+    'Uncategorized',
+  );
+
+  // Sub-category breakdown (this month) for finer insight, only over expenses
+  // that carry a sub-category. Grouped by subCategoryId resolved to its name.
+  const subCategoryBreakdown = groupByReference(
+    expenses.filter((e) => e.subCategoryId !== undefined),
+    (e) => e.subCategoryId,
+    (id) => subCategoryNameById.get(id) ?? 'Unknown',
+    'Uncategorized',
+  ).sort((a, b) => b.total - a.total);
 
   const hasExpenses = expenses.length > 0;
 
@@ -276,6 +295,38 @@ export function Insights({
               </span>
             </div>
           </div>
+
+          {/* Sub-category breakdown (all-time, only tagged expenses). */}
+          {subCategoryBreakdown.length > 0 && (
+            <div className="col-span-12 glass-card glass-card-hover p-card_padding">
+              <h2 className="text-headline-md font-semibold text-on-surface mb-1">
+                Sub-category breakdown
+              </h2>
+              <p className="text-sm text-on-surface-variant mb-6">
+                Spending across expenses tagged with a sub-category.
+              </p>
+              <ul className="flex flex-col gap-4">
+                {subCategoryBreakdown.map((row) => {
+                  const max = subCategoryBreakdown[0]?.total || 1;
+                  const pct = (row.total / max) * 100;
+                  return (
+                    <li key={row.key} className="flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-on-surface text-sm">{row.key}</span>
+                        <Money amount={row.total} className="font-mono-data text-sm text-on-surface" />
+                      </div>
+                      <div className="h-2.5 w-full rounded-full bg-surface-container-highest overflow-hidden">
+                        <div
+                          className="h-full bg-primary-container neon-border rounded-full"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </section>

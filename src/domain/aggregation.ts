@@ -81,3 +81,37 @@ function monthKey(date: Date): string {
 export function groupByMonth(expenses: Expense[]): GroupTotal[] {
   return groupBy(expenses, (expense) => monthKey(expense.date));
 }
+
+/**
+ * Total expense amount grouped by a stable reference id (e.g. `categoryId` or
+ * `subCategoryId`), resolving each id to a display label via `labelOf`.
+ *
+ * Grouping by id (not by display name) keeps each logical category in exactly
+ * one bucket regardless of legacy name strings or renames, which is what makes
+ * the distribution accurate. Expenses whose id is absent fall into a single
+ * bucket keyed by `fallbackKey` (e.g. "Uncategorized") rather than scattering
+ * across stale name strings.
+ *
+ * @param expenses the expenses to group
+ * @param idOf extracts the grouping id from an expense, or undefined when absent
+ * @param labelOf resolves a present id to its display label
+ * @param fallbackKey label for expenses with no id
+ */
+export function groupByReference(
+  expenses: Expense[],
+  idOf: (expense: Expense) => string | undefined,
+  labelOf: (id: string) => string,
+  fallbackKey: string,
+): GroupTotal[] {
+  const centsByLabel = new Map<string, number>();
+  for (const expense of expenses) {
+    const id = idOf(expense);
+    const label = id === undefined ? fallbackKey : labelOf(id);
+    centsByLabel.set(label, (centsByLabel.get(label) ?? 0) + toCents(expense.amount));
+  }
+  const groups: GroupTotal[] = [];
+  for (const [key, cents] of centsByLabel) {
+    groups.push({ key, total: fromCents(cents) });
+  }
+  return groups;
+}

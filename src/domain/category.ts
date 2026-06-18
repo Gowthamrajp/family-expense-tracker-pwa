@@ -61,6 +61,7 @@ export type CategoryError =
 export function validateNewCategory(
   raw: string,
   existing: FamilyCategory[],
+  excludeId?: string,
 ): Result<string, CategoryError> {
   const normalized = normalizeCategoryName(raw);
   if (normalized.length === 0) {
@@ -68,7 +69,9 @@ export function validateNewCategory(
   }
 
   const isDuplicate = existing.some(
-    (category) => normalizeCategoryName(category.name) === normalized,
+    (category) =>
+      category.id !== excludeId &&
+      normalizeCategoryName(category.name) === normalized,
   );
   if (isDuplicate) {
     return err({ kind: 'duplicate' });

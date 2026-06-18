@@ -25,10 +25,12 @@
 import { useState } from 'react';
 
 import { resolveMemberLabel } from '../domain/member';
-import { SOURCES, type FamilyMember, type Source } from '../domain/types';
+import { SOURCES, type FamilyCategory, type FamilyMember, type Source } from '../domain/types';
+import { subCategoryRepository } from '../data/subCategoryRepository';
 import { useAuth } from '../state/AuthProvider';
 import { useCategories } from '../state/useCategories';
 import { useFamily } from '../state/FamilyProvider';
+import { useSubCategories } from '../state/useSubCategories';
 import { useSubSources } from '../state/useSubSources';
 
 const CATEGORY_REQUIRED_MESSAGE = 'Enter a category name.';
@@ -344,18 +346,13 @@ interface CategoryManagerProps {
  * shows a brief confirmation (Req 4.3).
  */
 export function CategoryManager({ familyId }: CategoryManagerProps): JSX.Element {
-  const { categories, status, addCategory, deleteCategory } = useCategories(familyId);
+  const { categories, status, addCategory } = useCategories(familyId);
+  const subCategoryApi = useSubCategories(familyId);
 
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
-  // Id of the category awaiting delete confirmation (inline confirm state).
-  const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  // Id of the category whose delete is in flight.
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  // Per-category in-use message keyed by category id (Req 4.9).
-  const [inUseById, setInUseById] = useState<Record<string, string>>({});
 
   const handleAdd = async () => {
     if (isAdding) {
@@ -381,43 +378,19 @@ export function CategoryManager({ familyId }: CategoryManagerProps): JSX.Element
     }
   };
 
-  const handleDelete = async (categoryId: string) => {
-    if (deletingId !== null) {
-      return;
-    }
-    setConfirmingId(null);
-    setDeletingId(categoryId);
-    // Clear any stale in-use message for this item before re-checking.
-    setInUseById((prev) => {
-      const next = { ...prev };
-      delete next[categoryId];
-      return next;
-    });
-    try {
-      const result = await deleteCategory(categoryId);
-      if (!result.ok) {
-        // Blocked: still referenced by expenses. Surface the count inline and
-        // leave the item in place (Req 4.9).
-        setInUseById((prev) => ({
-          ...prev,
-          [categoryId]: inUseMessage(result.error.count),
-        }));
-      }
-      // On success the live subscription removes the item (Req 4.7); nothing
-      // further to do here.
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
   return (
     <section
       className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
       aria-labelledby="categories-heading"
     >
       <h2 id="categories-heading" className="text-headline-md font-semibold text-on-surface">
-        Categories
+        Categories &amp; sub-categories
       </h2>
+      <p className="text-sm text-on-surface-variant">
+        Rename or remove categories, and add sub-categories under each for finer
+        spending insights. A category or sub-category that's still used by an
+        expense can't be deleted.
+      </p>
 
       {status === 'loading' ? (
         <p role="status" className="text-on-surface-variant">
@@ -434,66 +407,15 @@ export function CategoryManager({ familyId }: CategoryManagerProps): JSX.Element
             <p className="text-on-surface-variant">No categories yet.</p>
           ) : (
             <ul className="flex flex-col gap-2">
-              {categories.map((category) => {
-                const inUse = inUseById[category.id];
-                const isConfirming = confirmingId === category.id;
-                const isDeleting = deletingId === category.id;
-                return (
-                  <li
-                    key={category.id}
-                    className="flex flex-col gap-1.5 px-3 py-2 rounded-lg text-sm text-on-surface bg-surface-container-high/40 border border-outline-variant/20"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="flex-1 truncate">{category.name}</span>
-                      {isConfirming ? (
-                        <span className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void handleDelete(category.id)}
-                            disabled={isDeleting}
-                            aria-busy={isDeleting}
-                            className="btn-ghost px-2.5 py-1 text-xs text-error"
-                          >
-                            {isDeleting ? 'Deleting…' : 'Confirm'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmingId(null)}
-                            disabled={isDeleting}
-                            className="btn-ghost px-2.5 py-1 text-xs"
-                          >
-                            Cancel
-                          </button>
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setInUseById((prev) => {
-                              const next = { ...prev };
-                              delete next[category.id];
-                              return next;
-                            });
-                            setConfirmingId(category.id);
-                          }}
-                          disabled={deletingId !== null}
-                          aria-label={`Delete category ${category.name}`}
-                          className="btn-ghost p-1.5 text-on-surface-variant hover:text-error"
-                        >
-                          <span className="material-symbols-outlined text-lg" aria-hidden="true">
-                            delete
-                          </span>
-                        </button>
-                      )}
-                    </div>
-                    {inUse && (
-                      <p role="alert" className="text-error text-xs">
-                        {inUse}
-                      </p>
-                    )}
-                  </li>
-                );
-              })}
+              {categories.map((category) => (
+                <CategoryRow
+                  key={category.id}
+                  category={category}
+                  categories={categories}
+                  familyId={familyId}
+                  subCategoryApi={subCategoryApi}
+                />
+              ))}
             </ul>
           )}
         </>
@@ -539,6 +461,316 @@ export function CategoryManager({ familyId }: CategoryManagerProps): JSX.Element
         </p>
       )}
     </section>
+  );
+}
+
+/** Props for {@link CategoryRow}. */
+interface CategoryRowProps {
+  category: FamilyCategory;
+  categories: FamilyCategory[];
+  familyId: string | null;
+  subCategoryApi: ReturnType<typeof useSubCategories>;
+}
+
+/**
+ * A single category row: inline rename, delete (blocked while in use), and an
+ * expandable sub-category manager (add/rename/delete sub-categories).
+ */
+function CategoryRow({ category, categories, familyId, subCategoryApi }: CategoryRowProps): JSX.Element {
+  const { renameCategory, deleteCategory } = useCategories(familyId);
+  void categories;
+  const { forCategory, addSubCategory, renameSubCategory, deleteSubCategory } =
+    subCategoryApi;
+
+  const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(category.name);
+  const [rowError, setRowError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [inUse, setInUse] = useState<string | null>(null);
+
+  // New sub-category input.
+  const [newSub, setNewSub] = useState('');
+  const [subError, setSubError] = useState<string | null>(null);
+  const subCategories = forCategory(category.id);
+
+  const handleRename = async () => {
+    setRowError(null);
+    setBusy(true);
+    try {
+      const result = await renameCategory(category.id, editName);
+      if (result.ok) {
+        setEditing(false);
+      } else {
+        setRowError(
+          result.error.kind === 'duplicate'
+            ? CATEGORY_DUPLICATE_MESSAGE
+            : CATEGORY_REQUIRED_MESSAGE,
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setConfirmingDelete(false);
+    setInUse(null);
+    setBusy(true);
+    try {
+      const result = await deleteCategory(category.id);
+      if (!result.ok) {
+        setInUse(inUseMessage(result.error.count));
+      } else if (familyId !== null) {
+        // Category removed: clean up its (unreferenced) sub-categories so they
+        // don't linger orphaned. Best-effort; the live subscription updates.
+        await subCategoryRepository
+          .deleteSubCategoriesForCategory(familyId, category.id)
+          .catch(() => undefined);
+      }
+      // On success the live subscription removes the row.
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleAddSub = async () => {
+    setSubError(null);
+    const result = await addSubCategory(category.id, newSub);
+    if (result.ok) {
+      setNewSub('');
+    } else {
+      setSubError(
+        result.error.kind === 'duplicate'
+          ? 'That sub-category already exists.'
+          : 'Enter a sub-category name.',
+      );
+    }
+  };
+
+  return (
+    <li className="flex flex-col gap-2 px-3 py-2.5 rounded-lg text-sm text-on-surface bg-surface-container-high/40 border border-outline-variant/20">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-label={expanded ? 'Collapse sub-categories' : 'Expand sub-categories'}
+          className="btn-ghost p-1 text-on-surface-variant"
+        >
+          <span className="material-symbols-outlined text-lg" aria-hidden="true">
+            {expanded ? 'expand_less' : 'expand_more'}
+          </span>
+        </button>
+
+        {editing ? (
+          <>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => {
+                setEditName(e.target.value);
+                if (rowError) setRowError(null);
+              }}
+              disabled={busy}
+              className={`${CONTROL_CLASS} flex-1`}
+              autoComplete="off"
+              aria-label={`Rename category ${category.name}`}
+            />
+            <button type="button" onClick={() => void handleRename()} disabled={busy} className="btn-ghost px-2.5 py-1 text-xs text-primary-container">
+              {busy ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(false);
+                setEditName(category.name);
+                setRowError(null);
+              }}
+              disabled={busy}
+              className="btn-ghost px-2.5 py-1 text-xs"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="flex-1 truncate font-medium">{category.name}</span>
+            {subCategories.length > 0 && (
+              <span className="text-xs text-on-surface-variant">{subCategories.length} sub</span>
+            )}
+            {confirmingDelete ? (
+              <span className="flex items-center gap-2">
+                <button type="button" onClick={() => void handleDelete()} disabled={busy} className="btn-ghost px-2.5 py-1 text-xs text-error">
+                  {busy ? 'Deleting…' : 'Confirm'}
+                </button>
+                <button type="button" onClick={() => setConfirmingDelete(false)} disabled={busy} className="btn-ghost px-2.5 py-1 text-xs">
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <>
+                <button type="button" onClick={() => setEditing(true)} aria-label={`Rename category ${category.name}`} className="btn-ghost p-1.5 text-on-surface-variant hover:text-primary-container">
+                  <span className="material-symbols-outlined text-lg" aria-hidden="true">edit</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInUse(null);
+                    setConfirmingDelete(true);
+                  }}
+                  aria-label={`Delete category ${category.name}`}
+                  className="btn-ghost p-1.5 text-on-surface-variant hover:text-error"
+                >
+                  <span className="material-symbols-outlined text-lg" aria-hidden="true">delete</span>
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      {rowError && <p role="alert" className="text-error text-xs ml-9">{rowError}</p>}
+      {inUse && <p role="alert" className="text-error text-xs ml-9">{inUse}</p>}
+
+      {/* Sub-category manager (expanded). */}
+      {expanded && (
+        <div className="ml-9 flex flex-col gap-2 border-l border-outline-variant/20 pl-3">
+          {subCategories.length === 0 ? (
+            <p className="text-on-surface-variant text-xs">No sub-categories yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {subCategories.map((sub) => (
+                <SubCategoryRow
+                  key={sub.id}
+                  sub={sub}
+                  onRename={(value) => renameSubCategory(sub.id, category.id, value)}
+                  onDelete={() => deleteSubCategory(sub.id)}
+                />
+              ))}
+            </ul>
+          )}
+          <div className="flex flex-wrap gap-2 items-end">
+            <input
+              type="text"
+              value={newSub}
+              onChange={(e) => {
+                setNewSub(e.target.value);
+                if (subError) setSubError(null);
+              }}
+              placeholder="New sub-category"
+              className={`${CONTROL_CLASS} flex-1 min-w-[10rem]`}
+              autoComplete="off"
+            />
+            <button type="button" onClick={() => void handleAddSub()} className="btn-ghost px-3 py-2 text-xs">
+              Add sub-category
+            </button>
+          </div>
+          {subError && <p role="alert" className="text-error text-xs">{subError}</p>}
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** Props for {@link SubCategoryRow}. */
+interface SubCategoryRowProps {
+  sub: { id: string; categoryId: string; name: string };
+  onRename: (name: string) => Promise<{ ok: boolean; error?: { kind: string } } | { ok: true } | { ok: false; error: { kind: string } }>;
+  onDelete: () => Promise<{ ok: boolean; error?: { count: number } } | { ok: true } | { ok: false; error: { count: number } }>;
+}
+
+/** A single sub-category row with inline rename and in-use-protected delete. */
+function SubCategoryRow({ sub, onRename, onDelete }: SubCategoryRowProps): JSX.Element {
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(sub.name);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const handleRename = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const result = await onRename(editName);
+      if (result.ok) {
+        setEditing(false);
+      } else {
+        const kind = (result as { error: { kind: string } }).error.kind;
+        setError(kind === 'duplicate' ? 'That sub-category already exists.' : 'Enter a name.');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setConfirming(false);
+    setError(null);
+    setBusy(true);
+    try {
+      const result = await onDelete();
+      if (!result.ok) {
+        const count = (result as { error: { count: number } }).error.count;
+        setError(inUseMessage(count));
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        {editing ? (
+          <>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => {
+                setEditName(e.target.value);
+                if (error) setError(null);
+              }}
+              disabled={busy}
+              className={`${CONTROL_CLASS} flex-1`}
+              autoComplete="off"
+              aria-label={`Rename sub-category ${sub.name}`}
+            />
+            <button type="button" onClick={() => void handleRename()} disabled={busy} className="btn-ghost px-2 py-0.5 text-xs text-primary-container">
+              Save
+            </button>
+            <button type="button" onClick={() => { setEditing(false); setEditName(sub.name); setError(null); }} disabled={busy} className="btn-ghost px-2 py-0.5 text-xs">
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="flex-1 truncate text-on-surface-variant">{sub.name}</span>
+            {confirming ? (
+              <span className="flex items-center gap-2">
+                <button type="button" onClick={() => void handleDelete()} disabled={busy} className="btn-ghost px-2 py-0.5 text-xs text-error">
+                  {busy ? 'Deleting…' : 'Confirm'}
+                </button>
+                <button type="button" onClick={() => setConfirming(false)} disabled={busy} className="btn-ghost px-2 py-0.5 text-xs">
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <>
+                <button type="button" onClick={() => setEditing(true)} aria-label={`Rename sub-category ${sub.name}`} className="btn-ghost p-1 text-on-surface-variant hover:text-primary-container">
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">edit</span>
+                </button>
+                <button type="button" onClick={() => setConfirming(true)} aria-label={`Delete sub-category ${sub.name}`} className="btn-ghost p-1 text-on-surface-variant hover:text-error">
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">delete</span>
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+      {error && <p role="alert" className="text-error text-xs">{error}</p>}
+    </li>
   );
 }
 

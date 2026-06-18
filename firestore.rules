@@ -80,7 +80,15 @@ service cloud.firestore {
         // in-use block (Req 4.9) cannot be expressed in rules (no cheap
         // cross-document existence check) and is enforced in the data layer.
         allow delete: if isMember(familyId);
-        allow update: if false;                // editing a category is out of scope
+        // Members may rename a category (display-name edit); the id is stable.
+        allow update: if isMember(familyId);
+      }
+      // Sub-categories: family-scoped refinements of a category for finer
+      // spending classification. Members may read and manage them. Delete is
+      // gated in the data layer by an in-use check, same as categories.
+      match /subCategories/{subCategoryId} {
+        allow read: if isMember(familyId);
+        allow create, update, delete: if isMember(familyId);
       }
       match /subSources/{subSourceId} {
         allow read: if isMember(familyId);

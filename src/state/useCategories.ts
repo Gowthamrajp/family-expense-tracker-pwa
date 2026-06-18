@@ -52,6 +52,16 @@ export interface UseCategoriesResult {
    */
   addCategory(name: string): Promise<Result<FamilyCategory, CategoryError>>;
   /**
+   * Rename an existing category. Validates the new name against the other
+   * categories (case/space-insensitive uniqueness, excluding itself). On
+   * success the live subscription reflects the new name; since grouping is by
+   * id, all referencing expenses update automatically.
+   */
+  renameCategory(
+    categoryId: string,
+    name: string,
+  ): Promise<Result<FamilyCategory, CategoryError>>;
+  /**
    * Delete a category. Delegates to
    * {@link categoryRepository.deleteCategory}, which removes the category only
    * when no Expense in the family references it (Req 4.8). When one or more
@@ -156,5 +166,33 @@ export function useCategories(familyId: string | null): UseCategoriesResult {
     [familyId],
   );
 
-  return { categories, status, addCategory, deleteCategory };
+  const renameCategory = useCallback(
+    async (
+      categoryId: string,
+      name: string,
+    ): Promise<Result<FamilyCategory, CategoryError>> => {
+      // Validate against the other categories (exclude this one so re-casing
+      // its own name is allowed).
+      const validation = validateNewCategory(
+        name,
+        categoriesRef.current,
+        categoryId,
+      );
+      if (!validation.ok) {
+        return err(validation.error);
+      }
+      if (familyId === null) {
+        return err({ kind: 'required' });
+      }
+      await categoryRepository.renameCategory(
+        familyId,
+        categoryId,
+        validation.value,
+      );
+      return ok({ id: categoryId, name: validation.value });
+    },
+    [familyId],
+  );
+
+  return { categories, status, addCategory, deleteCategory, renameCategory };
 }

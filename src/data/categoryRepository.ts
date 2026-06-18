@@ -17,6 +17,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  updateDoc,
   where,
   writeBatch,
   type DocumentData,
@@ -69,6 +70,13 @@ export interface CategoryRepository {
    * Validates: Requirements 4.3
    */
   addCategory(familyId: string, name: string): Promise<string>;
+
+  /**
+   * Rename an existing category (display name only). The id is unchanged, so
+   * all referencing expenses keep their `categoryId` and grouping is unaffected
+   * — the new name simply appears everywhere the id resolves.
+   */
+  renameCategory(familyId: string, categoryId: string, name: string): Promise<void>;
 
   /**
    * Seed the family's categories with the {@link DEFAULT_CATEGORY_SET}, writing
@@ -180,6 +188,17 @@ export const categoryRepository: CategoryRepository = {
     const docData: CategoryDocument = { name };
     const ref = await addDoc(categoriesCollection(familyId), docData);
     return ref.id;
+  },
+
+  async renameCategory(
+    familyId: string,
+    categoryId: string,
+    name: string,
+  ): Promise<void> {
+    await updateDoc(
+      doc(firestore, FAMILIES_COLLECTION, familyId, CATEGORIES_COLLECTION, categoryId),
+      { name },
+    );
   },
 
   async seedDefaults(familyId: string): Promise<void> {

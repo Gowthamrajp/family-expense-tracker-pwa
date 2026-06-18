@@ -42,6 +42,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useExpenses } from '../state/useExpenses';
 import { useCategories } from '../state/useCategories';
+import { useSubCategories } from '../state/useSubCategories';
 import { useSubSources } from '../state/useSubSources';
 import { resolveLabels, type ExpenseRow } from '../domain/expenseMapper';
 import { SOURCES, type Expense, type Source } from '../domain/types';
@@ -157,6 +158,7 @@ function ExpenseListRow({
     categoryName,
     sourceName,
     subSourceNickname,
+    subCategoryName,
     recordedByName,
     date,
     description,
@@ -207,6 +209,11 @@ function ExpenseListRow({
           <span data-testid="expense-category" className="font-semibold text-on-surface">
             {categoryName}
           </span>
+          {subCategoryName !== undefined && (
+            <span data-testid="expense-subcategory" className="text-xs px-1.5 py-0.5 rounded bg-primary-container/10 text-primary-container">
+              {subCategoryName}
+            </span>
+          )}
           <span data-testid="expense-recordedby" className="text-xs text-on-surface-variant italic">
             by {recordedByName}
           </span>
@@ -337,6 +344,7 @@ export function ExpenseList({
   // expense list: `resolveLabels` falls back to the legacy `category` string
   // and omits the sub-source nickname when the lookup data is unavailable.
   const { categories } = useCategories(familyId);
+  const { subCategories } = useSubCategories(familyId);
   const { subSources } = useSubSources(familyId);
 
   // The expense currently open in the edit modal, or `null` when no modal is
@@ -375,7 +383,7 @@ export function ExpenseList({
   // sub-source data delivered by the live subscriptions.
   const allEntries = expenses.map((expense) => ({
     expense,
-    row: resolveLabels(expense, categories, subSources),
+    row: resolveLabels(expense, categories, subSources, subCategories),
   }));
 
   // Apply the search/filter controls. Search matches the description, category
@@ -591,7 +599,7 @@ export function ExpenseList({
           a close control, or Escape. */}
       {selected !== null && (
         <TransactionDetailsDrawer
-          row={resolveLabels(selected, categories, subSources)}
+          row={resolveLabels(selected, categories, subSources, subCategories)}
           expense={selected}
           onClose={() => setSelected(null)}
           onEdit={(expense) => {
@@ -681,6 +689,12 @@ function TransactionDetailsDrawer({
         </div>
 
         <dl className="flex flex-col gap-3 text-sm">
+          {row.subCategoryName !== undefined && (
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-on-surface-variant">Sub-category</dt>
+              <dd className="text-on-surface">{row.subCategoryName}</dd>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-4">
             <dt className="text-on-surface-variant">Source</dt>
             <dd className="text-on-surface">{row.sourceName}</dd>

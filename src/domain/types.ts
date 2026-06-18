@@ -114,6 +114,28 @@ export interface FamilyCategory {
 }
 
 /**
+ * Family-scoped, editable Sub-category that refines a {@link FamilyCategory}
+ * for finer spending classification (e.g. Food → Groceries). Optional on an
+ * expense. `name` is unique within its parent category once normalized.
+ */
+export interface SubCategory {
+  id: string;
+  /** Id of the parent {@link FamilyCategory} this sub-category belongs to. */
+  categoryId: string;
+  /** Display name, unique within the parent category (case/space-insensitive). */
+  name: string;
+}
+
+/** Validated sub-category input ready to persist (no id). */
+export type SubCategoryInput = Omit<SubCategory, 'id'>;
+
+/** Document shape stored at `families/{familyId}/subCategories/{subCategoryId}`. */
+export interface SubCategoryDocument {
+  categoryId: string;
+  name: string;
+}
+
+/**
  * Optional, family-scoped refinement of a {@link Source}. Stores a nickname and
  * an optional last-4 identifier ONLY — never a full card number (Req 5.6, 9.5).
  * See design "Family-scoped domain models".
@@ -162,6 +184,8 @@ export interface ExpenseInput {
   source: Source;
   /** Reference to a family {@link FamilyCategory} (Req 3.2, 3.5). Optional during migration. */
   categoryId?: string;
+  /** Optional reference to a {@link SubCategory} under the chosen category. */
+  subCategoryId?: string;
   /** Optional reference to a {@link SubSource} (Req 3.8). */
   subSourceId?: string;
   date: Date;
@@ -223,6 +247,8 @@ export interface ExpenseDocument {
   source: string;
   /** Family Category id (Req 3.2). Optional during migration. */
   categoryId?: string;
+  /** Family SubCategory id, when selected. */
+  subCategoryId?: string;
   /** Family SubSource id, when selected (Req 3.8). */
   subSourceId?: string;
   date: FirestoreTimestamp;
@@ -250,6 +276,8 @@ export interface ExpenseUpdateDocument {
   amount: number;
   /** Family Category id (Req 3.2, 3.14). */
   categoryId: string;
+  /** Family SubCategory id, when selected; omitted/field-deleted otherwise. */
+  subCategoryId?: string;
   source: string;
   /** Omitted (or field-deleted) when no sub-source is chosen. */
   subSourceId?: string;

@@ -49,6 +49,7 @@ import { SOURCES, type Expense, type ExpenseInput, type Source } from '../domain
 import { useAuth } from '../state/AuthProvider';
 import { useCategories } from '../state/useCategories';
 import { useExpenses } from '../state/useExpenses';
+import { useSubCategories } from '../state/useSubCategories';
 import { useSubSources } from '../state/useSubSources';
 
 /**
@@ -78,6 +79,7 @@ const CONTROL_CLASS = 'ghost-input px-3 py-2.5 text-body-md w-full';
 interface FormState {
   amount: string;
   category: string;
+  subCategory: string;
   source: string;
   subSource: string;
   date: string;
@@ -88,11 +90,20 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   amount: '',
   category: '',
+  subCategory: '',
   source: '',
   subSource: '',
   date: '',
   description: '',
 };
+
+/**
+ * Build the initial create-mode form state, pre-filling the date with today so
+ * the picker shows the current date by default; the member can still change it.
+ */
+function freshForm(): FormState {
+  return { ...EMPTY_FORM, date: toDateInputValue(new Date()) };
+}
 
 /**
  * Format a stored {@link Date} as the `yyyy-mm-dd` value a native date input
@@ -117,6 +128,7 @@ function formStateFromExpense(expense: Expense): FormState {
   return {
     amount: expense.amount.toString(),
     category: expense.categoryId ?? '',
+    subCategory: expense.subCategoryId ?? '',
     source: expense.source,
     subSource: expense.subSourceId ?? '',
     date: toDateInputValue(expense.date),
@@ -248,13 +260,14 @@ export function ExpenseEntryForm({
 
   const { member } = useAuth();
   const { categories } = useCategories(familyId);
+  const { forCategory, status: subCategoriesStatus } = useSubCategories(familyId);
   const { forSource, status: subSourcesStatus } = useSubSources(familyId);
   const { updateExpense } = useExpenses(familyId);
 
   const [form, setForm] = useState<FormState>(() =>
     existingExpense !== undefined
       ? formStateFromExpense(existingExpense)
-      : EMPTY_FORM,
+      : freshForm(),
   );
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saveState, setSaveState] = useState<SaveState>({ kind: 'idle' });
@@ -264,6 +277,33 @@ export function ExpenseEntryForm({
   const saveAttemptRef = useRef(0);
 
   const isSaving = saveState.kind === 'saving';
+
+  // Sub-categories available for the currently selected Category. Only a
+  // non-empty category selection yields candidates.
+  const subCategoryOptions = useMemo(
+    () => (form.category !== '' ? forCategory(form.category) : []),
+    [form.category, forCategory],
+  );
+
+  // Reset the sub-category selection when the category changes (or its
+  // available sub-categories change) so a stale sub-category from a different
+  // category is never submitted. In edit mode the pre-populated sub-category
+  // must survive until its sub-categories have loaded, so the reset is deferred
+  // while the subscription is still loading.
+  useEffect(() => {
+    if (subCategoriesStatus === 'loading') {
+      return;
+    }
+    setForm((current) => {
+      if (current.subCategory === '') {
+        return current;
+      }
+      const stillValid = subCategoryOptions.some(
+        (sub) => sub.id === current.subCategory,
+      );
+      return stillValid ? current : { ...current, subCategory: '' };
+    });
+  }, [subCategoryOptions, subCategoriesStatus]);
 
   // SubSources available for the currently selected Source (Req 3.7). Only a
   // valid Source selection yields candidates; an empty/unknown source has none.
@@ -384,6 +424,12 @@ export function ExpenseEntryForm({
         expenseInput.subSourceId = form.subSource;
       }
 
+      // Attach a SubCategory reference only when one is selected under the
+      // chosen category; an empty selection is omitted.
+      if (form.subCategory !== '') {
+        expenseInput.subCategoryId = form.subCategory;
+      }
+
       const attemptId = saveAttemptRef.current + 1;
       saveAttemptRef.current = attemptId;
       setSaveState({ kind: 'saving' });
@@ -407,7 +453,7 @@ export function ExpenseEntryForm({
         // Success: confirm. In create mode clear every field (Req 3.11); in edit
         // mode retain the saved values so the form keeps showing what was stored.
         if (!isEditMode) {
-          setForm(EMPTY_FORM);
+          setForm(freshForm());
         }
         setSaveState({ kind: 'success' });
         // Notify the host (e.g. an edit modal) after a successful save.
@@ -510,6 +556,31 @@ export function ExpenseEntryForm({
           )}
         </div>
 
+        {/* Sub-category: optional; shown only when the selected Category has at
+            least one sub-category defined for the family. */}
+        {subCategoryOptions.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="expense-subcategory" className="text-sm text-on-surface-variant">
+              Sub-category (optional)
+            </label>
+            <select
+              id="expense-subcategory"
+              name="subCategory"
+              value={form.subCategory}
+              onChange={(event) => updateField('subCategory', event.target.value)}
+              disabled={isSaving}
+              className={CONTROL_CLASS}
+            >
+              <option value="">No specific sub-category</option>
+              {subCategoryOptions.map((sub) => (
+                <option key={sub.id} value={sub.id}>
+                  {sub.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Source: required selection (Req 3.1, 3.6). */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="expense-source" className="text-sm text-on-surface-variant">
@@ -569,7 +640,7 @@ export function ExpenseEntryForm({
         {/* Date: optional; empty defaults to today (Req 3.1, 3.9, 3.10). */}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="expense-date" className="text-sm text-on-surface-variant">
-            Date
+            Date <span className="text-on-surface-variant/60">(defaults to today)</span>
           </label>
           <input
             id="expense-date"

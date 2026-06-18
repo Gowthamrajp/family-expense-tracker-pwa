@@ -78,17 +78,21 @@ export interface CategoryShare {
 
 /**
  * Compute each category's share of total spend across all provided expenses,
- * sorted by total descending. `labelOf` resolves an expense to its category
- * label (so callers can map categoryId -> family Category name).
+ * sorted by total descending. Groups by a stable id (via `idOf`) and resolves
+ * the display label via `labelOf`, so renames/legacy strings never fragment a
+ * category into multiple slices. Expenses with no id use `fallbackKey`.
  */
 export function categoryShares(
   expenses: Expense[],
-  labelOf: (expense: Expense) => string,
+  idOf: (expense: Expense) => string | undefined,
+  labelOf: (id: string) => string,
+  fallbackKey: string,
 ): CategoryShare[] {
   const centsByKey = new Map<string, number>();
   let grandCents = 0;
   for (const expense of expenses) {
-    const key = labelOf(expense);
+    const id = idOf(expense);
+    const key = id === undefined ? fallbackKey : labelOf(id);
     const cents = toCents(expense.amount);
     centsByKey.set(key, (centsByKey.get(key) ?? 0) + cents);
     grandCents += cents;
@@ -116,12 +120,15 @@ export interface CategoryComparison {
 /**
  * Compare per-category spend between the current and previous month.
  * Returns one row per category seen in either month, sorted by current spend
- * descending. `labelOf` resolves each expense to its category label.
+ * descending. Groups by stable id (`idOf`) resolved to a label (`labelOf`);
+ * expenses without an id use `fallbackKey`.
  */
 export function categoryComparison(
   expenses: Expense[],
   today: Date,
-  labelOf: (expense: Expense) => string,
+  idOf: (expense: Expense) => string | undefined,
+  labelOf: (id: string) => string,
+  fallbackKey: string,
 ): CategoryComparison[] {
   const curKey = currentMonthKey(today);
   const prevKey = previousMonthKey(today);
@@ -130,7 +137,8 @@ export function categoryComparison(
 
   for (const expense of expenses) {
     const mk = monthKey(expense.date);
-    const label = labelOf(expense);
+    const id = idOf(expense);
+    const label = id === undefined ? fallbackKey : labelOf(id);
     const cents = toCents(expense.amount);
     if (mk === curKey) {
       current.set(label, (current.get(label) ?? 0) + cents);

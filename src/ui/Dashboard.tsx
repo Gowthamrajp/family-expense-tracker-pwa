@@ -46,12 +46,12 @@ import {
 import { useExpenses } from '../state/useExpenses';
 import { useCategories } from '../state/useCategories';
 import {
-  groupByCategory,
   groupByMonth,
+  groupByReference,
   groupBySource,
   totalAmount,
 } from '../domain/aggregation';
-import type { Expense, GroupTotal } from '../domain/types';
+import type { GroupTotal } from '../domain/types';
 import { Money, formatINR } from './Money';
 
 /** Message shown when no expenses exist for the family group (Req 4.6). */
@@ -170,27 +170,19 @@ export function Dashboard({
   // keeping labels live as categories are added/renamed (Req 7.5).
   const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
 
-  // Derive a category-resolved view of the expenses for the by-category
-  // grouping only: replace `category` with the resolved Category name when the
-  // expense's `categoryId` maps to a known family Category, otherwise keep the
-  // existing legacy `category` string. Source/month/total inputs are unchanged.
-  const categoryResolvedExpenses: Expense[] = expenses.map((expense) => {
-    const resolvedName =
-      expense.categoryId !== undefined
-        ? categoryNameById.get(expense.categoryId)
-        : undefined;
-    return resolvedName === undefined
-      ? expense
-      : { ...expense, category: resolvedName as Expense['category'] };
-  });
-
   // Aggregations recompute on every render from the current expenses, so the
   // total and charts always reflect the latest snapshot delivered by the live
-  // subscription (Req 7.5). Only the category grouping uses the resolved names;
-  // total, source, and month grouping are computed from the raw expenses so
-  // their aggregation is unchanged (Req 7.1, 7.3, 7.4).
+  // subscription (Req 7.5). The category grouping is keyed by `categoryId`
+  // (resolved to a name for display) so each category is one bucket regardless
+  // of legacy name strings or renames; expenses without a categoryId collapse
+  // into a single "Uncategorized" bucket. Total/source/month are unchanged.
   const total = totalAmount(expenses);
-  const byCategory = groupByCategory(categoryResolvedExpenses);
+  const byCategory = groupByReference(
+    expenses,
+    (expense) => expense.categoryId,
+    (id) => categoryNameById.get(id) ?? 'Unknown',
+    'Uncategorized',
+  );
   const bySource = groupBySource(expenses);
   const byMonth = groupByMonth(expenses);
 

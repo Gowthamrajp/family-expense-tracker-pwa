@@ -13,6 +13,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   onSnapshot,
   orderBy,
@@ -136,6 +137,9 @@ function readDocument(snapshot: QueryDocumentSnapshot<DocumentData>): Expense {
   if (data.categoryId !== undefined) {
     doc.categoryId = data.categoryId;
   }
+  if (data.subCategoryId !== undefined) {
+    doc.subCategoryId = data.subCategoryId;
+  }
   if (data.subSourceId !== undefined) {
     doc.subSourceId = data.subSourceId;
   }
@@ -191,6 +195,9 @@ export const expenseRepository: ExpenseRepository = {
     if (docData.categoryId === undefined) {
       delete docData.categoryId;
     }
+    if (docData.subCategoryId === undefined) {
+      delete docData.subCategoryId;
+    }
 
     const ref = await addDoc(expensesCollection(familyId), docData);
     return ref.id;
@@ -239,9 +246,14 @@ export const expenseRepository: ExpenseRepository = {
 
     // Defensive guard: Firestore rejects `undefined` field values. The mapper
     // already omits an absent `subSourceId`, but strip it if it slipped through
-    // so we never attempt to write `undefined` (Req 3.8).
+    // so we never attempt to write `undefined` (Req 3.8). For an edit, a
+    // previously-set sub-category/sub-source that is now unselected must be
+    // actively cleared, so replace an absent value with deleteField().
     if (docData.subSourceId === undefined) {
-      delete docData.subSourceId;
+      docData.subSourceId = deleteField();
+    }
+    if (docData.subCategoryId === undefined) {
+      docData.subCategoryId = deleteField();
     }
 
     // Any member of the family may edit any expense (Req 3.19); no recorder

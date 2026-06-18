@@ -17,6 +17,7 @@ import type {
   FamilyMember,
   FirestoreTimestamp,
   Source,
+  SubCategory,
   SubSource,
 } from './types';
 import { resolveMemberLabel } from './member';
@@ -43,6 +44,11 @@ export interface ExpenseRow {
    * matches a known sub-source; otherwise omitted (Req 6.3).
    */
   subSourceNickname?: string;
+  /**
+   * Resolved {@link SubCategory} name when `subCategoryId` is present and
+   * matches a known sub-category; otherwise omitted.
+   */
+  subCategoryName?: string;
   /** Funding method label. */
   sourceName: Source;
   amount: number;
@@ -108,6 +114,9 @@ export function toFirestore(
   if (input.categoryId !== undefined) {
     doc.categoryId = input.categoryId;
   }
+  if (input.subCategoryId !== undefined) {
+    doc.subCategoryId = input.subCategoryId;
+  }
   if (input.subSourceId !== undefined) {
     doc.subSourceId = input.subSourceId;
   }
@@ -148,6 +157,9 @@ export function toUpdateFields(
     updatedAt: dateToTimestamp(updatedAt),
   };
 
+  if (input.subCategoryId !== undefined) {
+    doc.subCategoryId = input.subCategoryId;
+  }
   if (input.subSourceId !== undefined) {
     doc.subSourceId = input.subSourceId;
   }
@@ -179,6 +191,9 @@ export function fromFirestore(id: string, doc: ExpenseDocument): Expense {
 
   if (doc.categoryId !== undefined) {
     expense.categoryId = doc.categoryId;
+  }
+  if (doc.subCategoryId !== undefined) {
+    expense.subCategoryId = doc.subCategoryId;
   }
   if (doc.subSourceId !== undefined) {
     expense.subSourceId = doc.subSourceId;
@@ -216,12 +231,18 @@ export function resolveLabels(
   exp: Expense,
   cats: FamilyCategory[],
   subs: SubSource[],
+  subCats: SubCategory[] = [],
 ): ExpenseRow {
   const matchedCategory =
     exp.categoryId !== undefined
       ? cats.find((category) => category.id === exp.categoryId)
       : undefined;
   const categoryName = matchedCategory?.name ?? exp.category;
+
+  const matchedSubCategory =
+    exp.subCategoryId !== undefined
+      ? subCats.find((sub) => sub.id === exp.subCategoryId)
+      : undefined;
 
   const matchedSubSource =
     exp.subSourceId !== undefined
@@ -238,6 +259,9 @@ export function resolveLabels(
     recordedByName: exp.recordedByName ?? exp.recordedBy,
   };
 
+  if (matchedSubCategory !== undefined) {
+    row.subCategoryName = matchedSubCategory.name;
+  }
   if (matchedSubSource !== undefined) {
     row.subSourceNickname = matchedSubSource.nickname;
   }
