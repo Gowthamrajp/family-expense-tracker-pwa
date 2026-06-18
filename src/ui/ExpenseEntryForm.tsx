@@ -270,6 +270,9 @@ export function ExpenseEntryForm({
       : freshForm(),
   );
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  // Sub-category is required only when the chosen category has sub-categories;
+  // tracked separately since it is not part of the shared FieldErrors type.
+  const [subCategoryError, setSubCategoryError] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>({ kind: 'idle' });
 
   // Identifies the in-flight save so a result that arrives after a newer
@@ -360,6 +363,15 @@ export function ExpenseEntryForm({
         errors.category = { kind: 'required' };
       }
 
+      // When the chosen category has sub-categories defined, selecting one is
+      // mandatory (so spending is always classified to the finest level the
+      // family has set up). Tracked separately from FieldErrors.
+      const subCategoryRequired =
+        form.category !== '' &&
+        subCategoryOptions.length > 0 &&
+        form.subCategory === '';
+      setSubCategoryError(subCategoryRequired);
+
       if (!isSource(form.source)) {
         // Required Source selection (Req 3.6).
         errors.source = { kind: 'required' };
@@ -375,7 +387,7 @@ export function ExpenseEntryForm({
         errors.description = descriptionResult.error;
       }
 
-      if (Object.keys(errors).length > 0) {
+      if (Object.keys(errors).length > 0 || subCategoryRequired) {
         // Per-field inline messages; nothing is stored (Req 3.4, 3.5, 3.6, 3.10).
         setFieldErrors(errors);
         setSaveState({ kind: 'idle' });
@@ -471,6 +483,7 @@ export function ExpenseEntryForm({
       member,
       familyId,
       categories,
+      subCategoryOptions,
       isEditMode,
       existingExpense,
       updateExpense,
@@ -532,7 +545,13 @@ export function ExpenseEntryForm({
             id="expense-category"
             name="category"
             value={form.category}
-            onChange={(event) => updateField('category', event.target.value)}
+            onChange={(event) => {
+              updateField('category', event.target.value);
+              // Changing the category invalidates any prior sub-category error.
+              if (subCategoryError) {
+                setSubCategoryError(false);
+              }
+            }}
             disabled={isSaving}
             aria-invalid={fieldErrors.category !== undefined}
             aria-describedby={
@@ -556,28 +575,42 @@ export function ExpenseEntryForm({
           )}
         </div>
 
-        {/* Sub-category: optional; shown only when the selected Category has at
-            least one sub-category defined for the family. */}
+        {/* Sub-category: required when the selected Category has at least one
+            sub-category defined for the family; hidden otherwise. */}
         {subCategoryOptions.length > 0 && (
           <div className="flex flex-col gap-1.5">
             <label htmlFor="expense-subcategory" className="text-sm text-on-surface-variant">
-              Sub-category (optional)
+              Sub-category
             </label>
             <select
               id="expense-subcategory"
               name="subCategory"
               value={form.subCategory}
-              onChange={(event) => updateField('subCategory', event.target.value)}
+              onChange={(event) => {
+                updateField('subCategory', event.target.value);
+                if (subCategoryError) {
+                  setSubCategoryError(false);
+                }
+              }}
               disabled={isSaving}
+              aria-invalid={subCategoryError}
+              aria-describedby={
+                subCategoryError ? 'expense-subcategory-error' : undefined
+              }
               className={CONTROL_CLASS}
             >
-              <option value="">No specific sub-category</option>
+              <option value="">Select a sub-category</option>
               {subCategoryOptions.map((sub) => (
                 <option key={sub.id} value={sub.id}>
                   {sub.name}
                 </option>
               ))}
             </select>
+            {subCategoryError && (
+              <span id="expense-subcategory-error" role="alert" className="text-error text-sm">
+                Select a sub-category.
+              </span>
+            )}
           </div>
         )}
 
