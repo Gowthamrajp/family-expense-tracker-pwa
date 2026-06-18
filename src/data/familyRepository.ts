@@ -35,6 +35,7 @@ import {
 import { DEFAULT_CATEGORY_SET, normalizeCategoryName } from '../domain/category';
 import { generateInviteCode, normalizeInviteCode } from '../domain/inviteCode';
 import { isExpenseMigrated, planMigration } from '../domain/migration';
+import { DEFAULT_SOURCE_SET } from '../domain/types';
 import type {
   Family,
   FamilyCategory,
@@ -439,6 +440,22 @@ export const familyRepository: FamilyRepository = {
     // Seed default categories (Req 4.1), then run best-effort, idempotent
     // migration of legacy expenses (Req 10.1). Neither aborts family creation.
     const seededCategories = await seedDefaultCategories(familyRef.id);
+    // Seed the default payment Sources (best-effort; never aborts creation).
+    try {
+      const sourcesRef = collection(
+        firestore,
+        FAMILIES_COLLECTION,
+        familyRef.id,
+        'sources',
+      );
+      const sourcesBatch = writeBatch(firestore);
+      for (const name of DEFAULT_SOURCE_SET) {
+        sourcesBatch.set(doc(sourcesRef), { name });
+      }
+      await sourcesBatch.commit();
+    } catch (error) {
+      console.warn(`Family ${familyRef.id} created, but seeding sources failed:`, error);
+    }
     let migrationFailures: MigrationFailure[] = [];
     try {
       migrationFailures = await migrateLegacyExpenses(

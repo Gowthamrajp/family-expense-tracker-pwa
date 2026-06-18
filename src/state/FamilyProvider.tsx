@@ -42,6 +42,7 @@ import {
   type FamilyRepository,
 } from '../data/familyRepository';
 import { recurringRepository } from '../data/recurringRepository';
+import { sourceRepository } from '../data/sourceRepository';
 import type { Family, FamilyMember, MigrationFailure } from '../domain/types';
 import { useAuth } from './AuthProvider';
 
@@ -227,6 +228,17 @@ export function FamilyProvider({
           .catch((error) => {
             console.warn(
               `Failed to materialize recurring expenses for ${resolvedFamily.id}:`,
+              error,
+            );
+          });
+
+        // Best-effort backfill: seed the default payment Sources for families
+        // created before Sources became managed data (no-op when any exist).
+        void sourceRepository
+          .seedDefaultsIfEmpty(resolvedFamily.id)
+          .catch((error) => {
+            console.warn(
+              `Failed to seed default sources for ${resolvedFamily.id}:`,
               error,
             );
           });

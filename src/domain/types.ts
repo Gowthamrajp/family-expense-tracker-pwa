@@ -61,24 +61,44 @@ export const CATEGORIES: readonly Category[] = [
 ] as const;
 
 /**
- * Funding method used to pay for an expense. Fixed enumeration (unchanged).
- * See requirements Glossary "Source".
+ * Funding method used to pay for an expense. Originally a fixed enumeration;
+ * now family-managed data, so a Source is any non-empty name string. The
+ * default set below seeds new families and documents the common values.
+ * Stored on Expenses/SubSources/RecurringRules by NAME (not id), so renaming a
+ * Source backfills those references to the new name.
  */
-export type Source =
-  | 'Cash'
-  | 'Credit Card'
-  | 'Reward Points'
-  | 'Food Coupon'
-  | 'Cashback Points';
+export type Source = string;
 
-/** All valid {@link Source} values, useful for selects and generators. */
-export const SOURCES: readonly Source[] = [
+/**
+ * Default Sources seeded when a family is created. Family members can add,
+ * rename, or remove Sources afterward.
+ */
+export const SOURCES: readonly string[] = [
   'Cash',
   'Credit Card',
   'Reward Points',
   'Food Coupon',
   'Cashback Points',
 ] as const;
+
+/** Alias for {@link SOURCES} read as the seed/default set. */
+export const DEFAULT_SOURCE_SET: readonly string[] = SOURCES;
+
+/**
+ * Family-scoped, editable payment Source. Stored under
+ * `families/{familyId}/sources/{id}` as `{ name }`. The `name` is what is
+ * written onto expenses/sub-sources, so it is unique within the family once
+ * normalized.
+ */
+export interface FamilySource {
+  id: string;
+  name: string;
+}
+
+/** Document shape stored at `families/{familyId}/sources/{sourceId}`. */
+export interface SourceDocument {
+  name: string;
+}
 
 /**
  * A family group. Members share all expense/category/sub-source data.

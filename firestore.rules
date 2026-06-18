@@ -104,7 +104,21 @@ service cloud.firestore {
         // in-use block (Req 5.10) is enforced in the data layer, same as
         // categories.
         allow delete: if isMember(familyId);
-        allow update: if false;                // editing a sub-source is out of scope
+        // Update is permitted only to support Source rename backfill (changing
+        // the stored `source` name). The same no-full-card-number allowlist is
+        // enforced so an update can never introduce extra/card fields.
+        allow update: if isMember(familyId)
+                      && request.resource.data.keys().hasOnly(['source','nickname','last4'])
+                      && request.resource.data.nickname is string
+                      && (!('last4' in request.resource.data)
+                          || request.resource.data.last4.matches('^[0-9]{4}$'));
+      }
+      // Payment Sources: family-scoped, editable funding methods. Members may
+      // read and manage them. Rename/delete protections (backfill, in-use
+      // block) are handled in the data layer.
+      match /sources/{sourceId} {
+        allow read: if isMember(familyId);
+        allow create, update, delete: if isMember(familyId);
       }
       // Member_Profile: any member may read every profile in their family so
       // the member list can show readable names (Req 2.6, 2.9); a member may

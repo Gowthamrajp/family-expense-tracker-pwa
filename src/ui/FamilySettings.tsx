@@ -25,11 +25,12 @@
 import { useState } from 'react';
 
 import { resolveMemberLabel } from '../domain/member';
-import { SOURCES, type FamilyCategory, type FamilyMember, type Source } from '../domain/types';
+import { type FamilyCategory, type FamilyMember, type FamilySource } from '../domain/types';
 import { subCategoryRepository } from '../data/subCategoryRepository';
 import { useAuth } from '../state/AuthProvider';
 import { useCategories } from '../state/useCategories';
 import { useFamily } from '../state/FamilyProvider';
+import { useSources } from '../state/useSources';
 import { useSubCategories } from '../state/useSubCategories';
 import { useSubSources } from '../state/useSubSources';
 
@@ -117,6 +118,7 @@ export function FamilySettings(): JSX.Element {
         onRemoveMember={removeMember}
       />
       <CategoryManager familyId={familyId} />
+      <SourceManager familyId={familyId} />
       <SubSourceManager familyId={familyId} />
     </main>
   );
@@ -780,6 +782,229 @@ interface SubSourceManagerProps {
   familyId: string | null;
 }
 
+/** Props for {@link SourceManager}. */
+interface SourceManagerProps {
+  /** Active family id, or `null` while no family is resolved. */
+  familyId: string | null;
+}
+
+/**
+ * Payment Source management section.
+ *
+ * Lists the family's payment Sources and lets members add, rename, and delete
+ * them. Renaming a Source backfills every expense, sub-source, and recurring
+ * rule that referenced the old name. A Source still used by any of those can't
+ * be deleted (the block reports the combined count).
+ */
+export function SourceManager({ familyId }: SourceManagerProps): JSX.Element {
+  const { sources, status, addSource, renameSource, deleteSource } = useSources(familyId);
+
+  const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
+
+  const handleAdd = async () => {
+    if (isAdding) {
+      return;
+    }
+    setError(null);
+    setConfirmation(null);
+    setIsAdding(true);
+    try {
+      const result = await addSource(name);
+      if (result.ok) {
+        setName('');
+        setConfirmation(`Added "${result.value.name}".`);
+      } else {
+        setError(
+          result.error.kind === 'duplicate'
+            ? 'That source already exists.'
+            : 'Enter a source name.',
+        );
+      }
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  return (
+    <section
+      className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
+      aria-labelledby="sources-heading"
+    >
+      <h2 id="sources-heading" className="text-headline-md font-semibold text-on-surface">
+        Payment sources
+      </h2>
+      <p className="text-sm text-on-surface-variant">
+        Funding methods used to pay for expenses (e.g. Cash, Credit Card).
+        Renaming a source updates it on all existing expenses; a source still
+        in use can't be deleted.
+      </p>
+
+      {status === 'loading' ? (
+        <p role="status" className="text-on-surface-variant">Loading sources…</p>
+      ) : (
+        <>
+          {status === 'error' && (
+            <p role="alert" className="text-error">Sources could not be loaded.</p>
+          )}
+          {sources.length === 0 ? (
+            <p className="text-on-surface-variant">No sources yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {sources.map((source) => (
+                <SourceRow
+                  key={source.id}
+                  source={source}
+                  sources={sources}
+                  onRename={(value) => renameSource(source.id, source.name, value)}
+                  onDelete={() => deleteSource(source.id, source.name)}
+                />
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+
+      <div className="flex flex-wrap gap-3 items-end">
+        <label className={`${FIELD_CLASS} flex-1 min-w-[12rem]`}>
+          New source
+          <input
+            type="text"
+            value={name}
+            onChange={(event) => {
+              setName(event.target.value);
+              if (error) setError(null);
+            }}
+            disabled={isAdding}
+            className={CONTROL_CLASS}
+            autoComplete="off"
+            aria-invalid={error !== null}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => void handleAdd()}
+          disabled={isAdding}
+          aria-busy={isAdding}
+          className="btn-primary px-4 py-2.5"
+        >
+          {isAdding ? 'Adding…' : 'Add source'}
+        </button>
+      </div>
+
+      {error && <p role="alert" className="text-error text-sm">{error}</p>}
+      {confirmation && <p role="status" className="text-primary-container text-sm">{confirmation}</p>}
+    </section>
+  );
+}
+
+/** Props for {@link SourceRow}. */
+interface SourceRowProps {
+  source: FamilySource;
+  sources: FamilySource[];
+  onRename: (name: string) => Promise<{ ok: true } | { ok: false; error: { kind: string } }>;
+  onDelete: () => Promise<{ ok: true } | { ok: false; error: { count: number } }>;
+}
+
+/** A single payment-source row with inline rename and in-use-protected delete. */
+function SourceRow({ source, onRename, onDelete }: SourceRowProps): JSX.Element {
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(source.name);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [inUse, setInUse] = useState<string | null>(null);
+
+  const handleRename = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const result = await onRename(editName);
+      if (result.ok) {
+        setEditing(false);
+      } else {
+        setError(
+          result.error.kind === 'duplicate'
+            ? 'That source already exists.'
+            : 'Enter a source name.',
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setConfirming(false);
+    setInUse(null);
+    setBusy(true);
+    try {
+      const result = await onDelete();
+      if (!result.ok) {
+        setInUse(inUseMessage(result.error.count));
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li className="flex flex-col gap-1.5 px-3 py-2 rounded-lg text-sm text-on-surface bg-surface-container-high/40 border border-outline-variant/20">
+      <div className="flex items-center gap-2">
+        {editing ? (
+          <>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => {
+                setEditName(e.target.value);
+                if (error) setError(null);
+              }}
+              disabled={busy}
+              className={`${CONTROL_CLASS} flex-1`}
+              autoComplete="off"
+              aria-label={`Rename source ${source.name}`}
+            />
+            <button type="button" onClick={() => void handleRename()} disabled={busy} className="btn-ghost px-2.5 py-1 text-xs text-primary-container">
+              {busy ? 'Saving…' : 'Save'}
+            </button>
+            <button type="button" onClick={() => { setEditing(false); setEditName(source.name); setError(null); }} disabled={busy} className="btn-ghost px-2.5 py-1 text-xs">
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="flex-1 truncate font-medium">{source.name}</span>
+            {confirming ? (
+              <span className="flex items-center gap-2">
+                <button type="button" onClick={() => void handleDelete()} disabled={busy} className="btn-ghost px-2.5 py-1 text-xs text-error">
+                  {busy ? 'Deleting…' : 'Confirm'}
+                </button>
+                <button type="button" onClick={() => setConfirming(false)} disabled={busy} className="btn-ghost px-2.5 py-1 text-xs">
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <>
+                <button type="button" onClick={() => setEditing(true)} aria-label={`Rename source ${source.name}`} className="btn-ghost p-1.5 text-on-surface-variant hover:text-primary-container">
+                  <span className="material-symbols-outlined text-lg" aria-hidden="true">edit</span>
+                </button>
+                <button type="button" onClick={() => { setInUse(null); setConfirming(true); }} aria-label={`Delete source ${source.name}`} className="btn-ghost p-1.5 text-on-surface-variant hover:text-error">
+                  <span className="material-symbols-outlined text-lg" aria-hidden="true">delete</span>
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+      {error && <p role="alert" className="text-error text-xs">{error}</p>}
+      {inUse && <p role="alert" className="text-error text-xs">{inUse}</p>}
+    </li>
+  );
+}
+
 /**
  * Sub-source management section (Req 5.1, 5.2, 5.3, 5.5).
  *
@@ -791,8 +1016,9 @@ interface SubSourceManagerProps {
  */
 export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Element {
   const { status, addSubSource, forSource, deleteSubSource } = useSubSources(familyId);
+  const { sources } = useSources(familyId);
 
-  const [source, setSource] = useState<Source>(SOURCES[0]);
+  const [source, setSource] = useState<string>('');
   const [nickname, setNickname] = useState('');
   const [last4, setLast4] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -811,6 +1037,10 @@ export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Eleme
     }
     setError(null);
     setConfirmation(null);
+    if (source === '') {
+      setError('Select a source.');
+      return;
+    }
     setIsAdding(true);
     try {
       const result = await addSubSource({
@@ -880,13 +1110,14 @@ export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Eleme
           Source
           <select
             value={source}
-            onChange={(event) => setSource(event.target.value as Source)}
+            onChange={(event) => setSource(event.target.value)}
             disabled={isAdding}
             className={CONTROL_CLASS}
           >
-            {SOURCES.map((option) => (
-              <option key={option} value={option}>
-                {option}
+            <option value="">Select a source</option>
+            {sources.map((option) => (
+              <option key={option.id} value={option.name}>
+                {option.name}
               </option>
             ))}
           </select>
@@ -961,14 +1192,14 @@ export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Eleme
             Sub-sources could not be loaded.
           </p>
         ) : (
-          SOURCES.map((option) => {
-            const items = forSource(option);
+          sources.map((option) => {
+            const items = forSource(option.name);
             if (items.length === 0) {
               return null;
             }
             return (
-              <div key={option} className="flex flex-col gap-1.5">
-                <h4 className="text-sm font-semibold text-on-surface">{option}</h4>
+              <div key={option.id} className="flex flex-col gap-1.5">
+                <h4 className="text-sm font-semibold text-on-surface">{option.name}</h4>
                 <ul className="flex flex-col gap-1">
                   {items.map((subSource) => {
                     const inUse = inUseById[subSource.id];

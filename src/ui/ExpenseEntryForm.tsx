@@ -45,10 +45,11 @@ import {
   validateDescription,
   type FieldErrors,
 } from '../domain/validation';
-import { SOURCES, type Expense, type ExpenseInput, type Source } from '../domain/types';
+import { type Expense, type ExpenseInput, type Source } from '../domain/types';
 import { useAuth } from '../state/AuthProvider';
 import { useCategories } from '../state/useCategories';
 import { useExpenses } from '../state/useExpenses';
+import { useSources } from '../state/useSources';
 import { useSubCategories } from '../state/useSubCategories';
 import { useSubSources } from '../state/useSubSources';
 
@@ -182,9 +183,9 @@ function descriptionErrorMessage(
   return `Use at most ${error.max} characters (currently ${error.actual}).`;
 }
 
-/** Type guard: is `value` one of the valid {@link Source} members? */
+/** Type guard: is `value` a non-empty source selection? */
 function isSource(value: string): value is Source {
-  return (SOURCES as readonly string[]).includes(value);
+  return value !== '';
 }
 
 /**
@@ -262,6 +263,7 @@ export function ExpenseEntryForm({
   const { categories } = useCategories(familyId);
   const { forCategory, status: subCategoriesStatus } = useSubCategories(familyId);
   const { forSource, status: subSourcesStatus } = useSubSources(familyId);
+  const { sources } = useSources(familyId);
   const { updateExpense } = useExpenses(familyId);
 
   const [form, setForm] = useState<FormState>(() =>
@@ -632,9 +634,9 @@ export function ExpenseEntryForm({
             className={CONTROL_CLASS}
           >
             <option value="">Select a source</option>
-            {SOURCES.map((source) => (
-              <option key={source} value={source}>
-                {source}
+            {sources.map((source) => (
+              <option key={source.id} value={source.name}>
+                {source.name}
               </option>
             ))}
           </select>

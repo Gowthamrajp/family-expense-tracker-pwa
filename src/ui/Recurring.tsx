@@ -16,13 +16,12 @@ import { useMemo, useState } from 'react';
 
 import {
   RECURRING_FREQUENCIES,
-  SOURCES,
   type RecurringFrequency,
-  type Source,
 } from '../domain/types';
 import { useAuth } from '../state/AuthProvider';
 import { useCategories } from '../state/useCategories';
 import { useRecurring, type RecurringFormErrors } from '../state/useRecurring';
+import { useSources } from '../state/useSources';
 import { useSubSources } from '../state/useSubSources';
 import { Money } from './Money';
 
@@ -69,6 +68,7 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
   const { member } = useAuth();
   const { categories } = useCategories(familyId);
   const { forSource } = useSubSources(familyId);
+  const { sources } = useSources(familyId);
   const { rules, status, addRule, deleteRule, setRuleActive } = useRecurring(
     familyId,
     member,
@@ -76,7 +76,7 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
 
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const [source, setSource] = useState<Source>(SOURCES[0]);
+  const [source, setSource] = useState<string>('');
   const [subSourceId, setSubSourceId] = useState('');
   const [description, setDescription] = useState('');
   const [frequency, setFrequency] = useState<RecurringFrequency>('monthly');
@@ -207,14 +207,15 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
             <select
               value={source}
               onChange={(e) => {
-                setSource(e.target.value as Source);
+                setSource(e.target.value);
                 setSubSourceId('');
               }}
               disabled={isAdding}
               className={CONTROL_CLASS}
             >
-              {SOURCES.map((s) => (
-                <option key={s} value={s}>{s}</option>
+              <option value="">Select a source</option>
+              {sources.map((s) => (
+                <option key={s.id} value={s.name}>{s.name}</option>
               ))}
             </select>
           </label>

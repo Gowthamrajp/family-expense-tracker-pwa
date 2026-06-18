@@ -24,7 +24,6 @@ import {
   type Result,
   type Source,
 } from '../domain/types';
-import { SOURCES } from '../domain/types';
 
 /** Lifecycle status of the recurring-rules subscription. */
 export type RecurringStatus = 'loading' | 'ready' | 'error';
@@ -64,9 +63,9 @@ export interface UseRecurringResult {
   setRuleActive(ruleId: string, active: boolean): Promise<void>;
 }
 
-/** Type guard for a valid Source. */
+/** Type guard for a valid (non-empty) Source name. */
 function isSource(value: string): value is Source {
-  return (SOURCES as readonly string[]).includes(value);
+  return value.trim() !== '';
 }
 
 /** Type guard for a valid frequency. */
