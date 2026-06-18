@@ -14,6 +14,8 @@
  * Amounts honor privacy mode through {@link Money}. Loading/empty/error states
  * mirror the dashboard.
  */
+import { useState } from 'react';
+
 import {
   Cell,
   Pie,
@@ -30,12 +32,13 @@ import {
   previousMonthKey,
   totalForMonth,
 } from '../domain/insights';
-import { groupByReference } from '../domain/aggregation';
 import { useCategories } from '../state/useCategories';
 import { useExpenses } from '../state/useExpenses';
 import { useSubCategories } from '../state/useSubCategories';
+import { useSubSources } from '../state/useSubSources';
 import { Money, formatINR } from './Money';
 import { Loader } from './Loader';
+import { CategoryDetail } from './CategoryDetail';
 
 /** Neon-cyan accent and a small palette for the donut slices. */
 const SLICE_COLORS = [
@@ -95,11 +98,23 @@ export function Insights({
   const { expenses, status, retry } = useExpenses(familyId, active);
   const { categories } = useCategories(familyId);
   const { subCategories } = useSubCategories(familyId);
+  const { subSources } = useSubSources(familyId);
+
+  // Drill-down target: the category the member tapped, or null when closed.
+  const [selectedCategory, setSelectedCategory] = useState<
+    { id: string | null; name: string } | null
+  >(null);
 
   const today = new Date();
   const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
-  const subCategoryNameById = new Map(subCategories.map((s) => [s.id, s.name]));
+  const categoryIdByName = new Map(categories.map((c) => [c.name, c.id]));
   const categoryLabel = (id: string): string => categoryNameById.get(id) ?? 'Unknown';
+
+  // Resolve a distribution/comparison label back to its category id so the
+  // drill-down can scope by id (null for the "Uncategorized" bucket).
+  const openCategory = (label: string): void => {
+    setSelectedCategory({ id: categoryIdByName.get(label) ?? null, name: label });
+  };
 
   const curKey = currentMonthKey(today);
   const prevKey = previousMonthKey(today);
@@ -123,14 +138,9 @@ export function Insights({
     'Uncategorized',
   );
 
-  // Sub-category breakdown (this month) for finer insight, only over expenses
-  // that carry a sub-category. Grouped by subCategoryId resolved to its name.
-  const subCategoryBreakdown = groupByReference(
-    expenses.filter((e) => e.subCategoryId !== undefined),
-    (e) => e.subCategoryId,
-    (id) => subCategoryNameById.get(id) ?? 'Unknown',
-    'Uncategorized',
-  ).sort((a, b) => b.total - a.total);
+  // Sub-category insight has moved into the per-category drill-down
+  // (CategoryDetail), where it is meaningful — clubbing every category's
+  // sub-categories together is not.
 
   const hasExpenses = expenses.length > 0;
 
@@ -229,17 +239,24 @@ export function Insights({
               </div>
               <ul className="flex-1 min-w-[10rem] space-y-2">
                 {shares.slice(0, 6).map((share, index) => (
-                  <li key={share.key} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="flex items-center gap-2 min-w-0">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ background: SLICE_COLORS[index % SLICE_COLORS.length] }}
-                      />
-                      <span className="text-on-surface-variant truncate">{share.key}</span>
-                    </span>
-                    <span className="font-mono-data text-on-surface">
-                      {(share.fraction * 100).toFixed(0)}%
-                    </span>
+                  <li key={share.key}>
+                    <button
+                      type="button"
+                      onClick={() => openCategory(share.key)}
+                      data-testid="insights-category-link"
+                      className="w-full flex items-center justify-between gap-2 text-sm rounded-md px-1.5 py-1 hover:bg-surface-container-highest/60 cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ background: SLICE_COLORS[index % SLICE_COLORS.length] }}
+                        />
+                        <span className="text-on-surface-variant truncate">{share.key}</span>
+                      </span>
+                      <span className="font-mono-data text-on-surface">
+                        {(share.fraction * 100).toFixed(0)}%
+                      </span>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -262,8 +279,18 @@ export function Insights({
                   return (
                     <li key={row.key} className="flex flex-col gap-2">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="text-on-surface text-sm">{row.key}</span>
-                        <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => openCategory(row.key)}
+                          data-testid="insights-category-link"
+                          className="text-on-surface text-sm inline-flex items-center gap-1 hover:text-primary-container cursor-pointer min-w-0"
+                        >
+                          <span className="truncate">{row.key}</span>
+                          <span className="material-symbols-outlined text-sm text-on-surface-variant shrink-0" aria-hidden="true">
+                            chevron_right
+                          </span>
+                        </button>
+                        <div className="flex items-center gap-3 shrink-0">
                           <Money amount={row.current} className="font-mono-data text-sm text-on-surface" />
                           <DeltaBadge percent={row.percent} />
                         </div>
@@ -295,38 +322,27 @@ export function Insights({
             </div>
           </div>
 
-          {/* Sub-category breakdown (all-time, only tagged expenses). */}
-          {subCategoryBreakdown.length > 0 && (
-            <div className="col-span-12 glass-card glass-card-hover p-card_padding">
-              <h2 className="text-headline-md font-semibold text-on-surface mb-1">
-                Sub-category breakdown
-              </h2>
-              <p className="text-sm text-on-surface-variant mb-6">
-                Spending across expenses tagged with a sub-category.
-              </p>
-              <ul className="flex flex-col gap-4">
-                {subCategoryBreakdown.map((row) => {
-                  const max = subCategoryBreakdown[0]?.total || 1;
-                  const pct = (row.total / max) * 100;
-                  return (
-                    <li key={row.key} className="flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-on-surface text-sm">{row.key}</span>
-                        <Money amount={row.total} className="font-mono-data text-sm text-on-surface" />
-                      </div>
-                      <div className="h-2.5 w-full rounded-full bg-surface-container-highest overflow-hidden">
-                        <div
-                          className="h-full bg-primary-container neon-border rounded-full"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
+          {/* Hint: sub-category insight lives inside each category's drill-down. */}
+          <div className="col-span-12 flex items-center gap-2 text-sm text-on-surface-variant px-1">
+            <span className="material-symbols-outlined text-base text-primary-container" aria-hidden="true">
+              touch_app
+            </span>
+            <span>Tap a category to see its sub-category split and transactions.</span>
+          </div>
         </div>
+      )}
+
+      {/* Per-category drill-down overlay (category → sub-category insights). */}
+      {selectedCategory !== null && (
+        <CategoryDetail
+          categoryId={selectedCategory.id}
+          categoryName={selectedCategory.name}
+          expenses={expenses}
+          categories={categories}
+          subCategories={subCategories}
+          subSources={subSources}
+          onClose={() => setSelectedCategory(null)}
+        />
       )}
     </section>
   );
