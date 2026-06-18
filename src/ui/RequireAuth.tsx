@@ -15,6 +15,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
 import { useAuth } from '../state/AuthProvider';
+import { Splash } from './Splash';
 
 /**
  * Guard wrapper for protected routes. Intended to be used as a layout route
@@ -26,11 +27,7 @@ export function RequireAuth(): JSX.Element {
 
   if (status === 'loading') {
     // Defer the redirect decision until the Session is resolved (Req 1.7).
-    return (
-      <div role="status" aria-live="polite">
-        Loading…
-      </div>
-    );
+    return <Splash message="Starting up…" />;
   }
 
   if (status !== 'authenticated') {

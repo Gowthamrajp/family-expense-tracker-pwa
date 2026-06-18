@@ -24,6 +24,7 @@
 import { Navigate, Outlet } from 'react-router-dom';
 
 import { useFamily } from '../state/FamilyProvider';
+import { Splash } from './Splash';
 
 /**
  * Guard wrapper for routes that require both an active Session and family
@@ -35,11 +36,7 @@ export function RequireFamily(): JSX.Element {
 
   if (status === 'loading') {
     // Defer the redirect decision until the family is resolved (Req 1.11).
-    return (
-      <div role="status" aria-live="polite">
-        Loading…
-      </div>
-    );
+    return <Splash message="Loading your family…" />;
   }
 
   if (status === 'no-family') {
