@@ -232,16 +232,8 @@ function ExpenseListRow({
         {/* Line 1: category name + optional sub-category chip. */}
         <div className="flex items-center gap-1.5 min-w-0">
           <span data-testid="expense-category" className="font-semibold text-on-surface truncate">
-            {categoryName}
+            {subCategoryName ?? categoryName}
           </span>
-          {subCategoryName !== undefined && (
-            <span
-              data-testid="expense-subcategory"
-              className="shrink-0 text-[11px] px-1.5 py-0.5 rounded bg-primary-container/10 text-primary-container"
-            >
-              {subCategoryName}
-            </span>
-          )}
         </div>
         {/* Line 2: source icon + (sub-source name, else source name) + recorder. */}
         <div className="flex items-center gap-1.5 flex-wrap text-xs text-on-surface-variant mt-0.5">
