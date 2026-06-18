@@ -24,6 +24,7 @@ import { useRecurring, type RecurringFormErrors } from '../state/useRecurring';
 import { useSources } from '../state/useSources';
 import { useSubSources } from '../state/useSubSources';
 import { Money } from './Money';
+import { Loader } from './Loader';
 
 /** Shared control classes. */
 const CONTROL_CLASS = 'ghost-input px-3 py-2.5 text-body-md w-full';
@@ -283,7 +284,7 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
       <section className="flex flex-col gap-3" aria-label="Existing recurring payments">
         <h2 className="text-headline-md font-semibold text-on-surface">Active &amp; paused</h2>
         {status === 'loading' ? (
-          <p role="status" className="text-on-surface-variant">Loading recurring payments…</p>
+          <Loader label="Loading recurring payments…" block />
         ) : status === 'error' ? (
           <p role="alert" className="text-error">Recurring payments could not be loaded.</p>
         ) : rules.length === 0 ? (

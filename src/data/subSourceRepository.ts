@@ -11,11 +11,13 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getCountFromServer,
   getDocs,
   onSnapshot,
   query,
+  updateDoc,
   where,
   type DocumentData,
   type QueryDocumentSnapshot,
@@ -119,6 +121,18 @@ export interface SubSourceRepository {
   addSubSource(familyId: string, input: SubSourceInput): Promise<string>;
 
   /**
+   * Update an existing sub-source's nickname and optional last-4 (the parent
+   * source is unchanged). Writes only the allowlisted fields so the
+   * no-full-card-number guarantee holds. The caller validates `input` via
+   * `validateSubSource`.
+   */
+  updateSubSource(
+    familyId: string,
+    subSourceId: string,
+    input: SubSourceInput,
+  ): Promise<void>;
+
+  /**
    * Delete a sub-source only when no Expense in the family references it.
    *
    * First counts the referencing expenses by querying the family's `expenses`
@@ -197,6 +211,21 @@ export const subSourceRepository: SubSourceRepository = {
     const [root, id, sub] = subSourcesPath(familyId);
     const ref = await addDoc(collection(firestore, root, id, sub), docData);
     return ref.id;
+  },
+
+  async updateSubSource(
+    familyId: string,
+    subSourceId: string,
+    input: SubSourceInput,
+  ): Promise<void> {
+    // Write only the editable fields (nickname + last4); the source stays put.
+    // An absent last4 is actively cleared so removing it persists.
+    const docData: Record<string, unknown> = {
+      nickname: input.nickname,
+      last4: input.last4 === undefined ? deleteField() : input.last4,
+    };
+    const [root, id, sub] = subSourcesPath(familyId);
+    await updateDoc(doc(firestore, root, id, sub, subSourceId), docData);
   },
 
   async deleteSubSource(

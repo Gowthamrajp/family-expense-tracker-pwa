@@ -53,6 +53,7 @@ import {
 } from '../domain/aggregation';
 import type { GroupTotal } from '../domain/types';
 import { Money, formatINR } from './Money';
+import { Loader } from './Loader';
 
 /** Message shown when no expenses exist for the family group (Req 4.6). */
 const EMPTY_STATE_MESSAGE = 'No expenses have been recorded yet.';
@@ -198,14 +199,7 @@ export function Dashboard({
 
       {/* Loading indicator while the data is being retrieved. */}
       {status === 'loading' && (
-        <p
-          role="status"
-          aria-live="polite"
-          data-testid="dashboard-loading"
-          className="text-on-surface-variant"
-        >
-          Loading dashboard…
-        </p>
+        <Loader label="Loading dashboard…" block testId="dashboard-loading" />
       )}
 
       {/*

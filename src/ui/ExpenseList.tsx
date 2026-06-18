@@ -48,6 +48,7 @@ import { resolveLabels, type ExpenseRow } from '../domain/expenseMapper';
 import { SOURCES, type Expense, type Source } from '../domain/types';
 import { ExpenseEntryForm } from './ExpenseEntryForm';
 import { Money } from './Money';
+import { Loader } from './Loader';
 
 /** Message shown when no expenses exist for the family group (Req 3.6). */
 const EMPTY_STATE_MESSAGE = 'No expenses have been recorded yet.';
@@ -485,14 +486,7 @@ export function ExpenseList({
 
       {/* Loading indicator while the list is being retrieved (Req 3.7). */}
       {status === 'loading' && (
-        <p
-          role="status"
-          aria-live="polite"
-          data-testid="expense-loading"
-          className="text-on-surface-variant"
-        >
-          Loading expenses…
-        </p>
+        <Loader label="Loading expenses…" block testId="expense-loading" />
       )}
 
       {/*

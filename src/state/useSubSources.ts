@@ -58,6 +58,15 @@ export interface UseSubSourcesResult {
   addSubSource(
     input: SubSourceFormInput,
   ): Promise<Result<SubSource, SubSourceError>>;
+  /**
+   * Validate and update an existing sub-source's nickname/last-4 (the parent
+   * source is unchanged). Returns `err` without writing when invalid.
+   */
+  updateSubSource(
+    subSourceId: string,
+    source: Source,
+    input: SubSourceFormInput,
+  ): Promise<Result<SubSource, SubSourceError>>;
   /** Sub-sources whose `source` matches the given {@link Source} (Req 3.7, 5.7). */
   forSource(source: Source): SubSource[];
   /**
@@ -149,6 +158,30 @@ export function useSubSources(familyId: string | null): UseSubSourcesResult {
     [familyId],
   );
 
+  const updateSubSource = useCallback(
+    async (
+      subSourceId: string,
+      source: Source,
+      input: SubSourceFormInput,
+    ): Promise<Result<SubSource, SubSourceError>> => {
+      // Validate the edited nickname/last-4 against the original source.
+      const validation = validateSubSource({ ...input, source });
+      if (!validation.ok) {
+        return err(validation.error);
+      }
+      if (familyId === null) {
+        throw new NoActiveFamilyError();
+      }
+      await subSourceRepository.updateSubSource(
+        familyId,
+        subSourceId,
+        validation.value,
+      );
+      return ok({ id: subSourceId, ...validation.value });
+    },
+    [familyId],
+  );
+
   const forSource = useCallback(
     (source: Source): SubSource[] =>
       subSources.filter((subSource) => subSource.source === source),
@@ -171,5 +204,5 @@ export function useSubSources(familyId: string | null): UseSubSourcesResult {
     [familyId],
   );
 
-  return { subSources, status, addSubSource, forSource, deleteSubSource };
+  return { subSources, status, addSubSource, updateSubSource, forSource, deleteSubSource };
 }

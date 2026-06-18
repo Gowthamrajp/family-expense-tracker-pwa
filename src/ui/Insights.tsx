@@ -35,6 +35,7 @@ import { useCategories } from '../state/useCategories';
 import { useExpenses } from '../state/useExpenses';
 import { useSubCategories } from '../state/useSubCategories';
 import { Money, formatINR } from './Money';
+import { Loader } from './Loader';
 
 /** Neon-cyan accent and a small palette for the donut slices. */
 const SLICE_COLORS = [
@@ -149,9 +150,7 @@ export function Insights({
       </div>
 
       {status === 'loading' && (
-        <p role="status" aria-live="polite" className="text-on-surface-variant">
-          Loading insights…
-        </p>
+        <Loader label="Loading insights…" block />
       )}
 
       {status === 'error' && (

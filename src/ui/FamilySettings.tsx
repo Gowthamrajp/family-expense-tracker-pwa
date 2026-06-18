@@ -33,6 +33,7 @@ import { useFamily } from '../state/FamilyProvider';
 import { useSources } from '../state/useSources';
 import { useSubCategories } from '../state/useSubCategories';
 import { useSubSources } from '../state/useSubSources';
+import { Loader } from './Loader';
 
 const CATEGORY_REQUIRED_MESSAGE = 'Enter a category name.';
 const CATEGORY_DUPLICATE_MESSAGE = 'That category already exists.';
@@ -82,9 +83,7 @@ export function FamilySettings(): JSX.Element {
   if (status === 'loading') {
     return (
       <main className="p-5 md:px-container_padding md:py-8 max-w-3xl mx-auto">
-        <p role="status" className="text-on-surface-variant">
-          Loading family…
-        </p>
+        <Loader label="Loading family…" block />
       </main>
     );
   }
@@ -119,7 +118,6 @@ export function FamilySettings(): JSX.Element {
       />
       <CategoryManager familyId={familyId} />
       <SourceManager familyId={familyId} />
-      <SubSourceManager familyId={familyId} />
     </main>
   );
 }
@@ -395,9 +393,7 @@ export function CategoryManager({ familyId }: CategoryManagerProps): JSX.Element
       </p>
 
       {status === 'loading' ? (
-        <p role="status" className="text-on-surface-variant">
-          Loading categories…
-        </p>
+        <Loader label="Loading categories…" />
       ) : (
         <>
           {status === 'error' && (
@@ -776,12 +772,6 @@ function SubCategoryRow({ sub, onRename, onDelete }: SubCategoryRowProps): JSX.E
   );
 }
 
-/** Props for {@link SubSourceManager}. */
-interface SubSourceManagerProps {
-  /** Active family id, or `null` while no family is resolved. */
-  familyId: string | null;
-}
-
 /** Props for {@link SourceManager}. */
 interface SourceManagerProps {
   /** Active family id, or `null` while no family is resolved. */
@@ -838,12 +828,12 @@ export function SourceManager({ familyId }: SourceManagerProps): JSX.Element {
       </h2>
       <p className="text-sm text-on-surface-variant">
         Funding methods used to pay for expenses (e.g. Cash, Credit Card).
-        Renaming a source updates it on all existing expenses; a source still
-        in use can't be deleted.
+        Expand a source to manage its cards/accounts. Renaming a source updates
+        it on all existing expenses; a source still in use can't be deleted.
       </p>
 
       {status === 'loading' ? (
-        <p role="status" className="text-on-surface-variant">Loading sources…</p>
+        <Loader label="Loading sources…" />
       ) : (
         <>
           {status === 'error' && (
@@ -857,7 +847,7 @@ export function SourceManager({ familyId }: SourceManagerProps): JSX.Element {
                 <SourceRow
                   key={source.id}
                   source={source}
-                  sources={sources}
+                  familyId={familyId}
                   onRename={(value) => renameSource(source.id, source.name, value)}
                   onDelete={() => deleteSource(source.id, source.name)}
                 />
@@ -903,19 +893,34 @@ export function SourceManager({ familyId }: SourceManagerProps): JSX.Element {
 /** Props for {@link SourceRow}. */
 interface SourceRowProps {
   source: FamilySource;
-  sources: FamilySource[];
+  familyId: string | null;
   onRename: (name: string) => Promise<{ ok: true } | { ok: false; error: { kind: string } }>;
   onDelete: () => Promise<{ ok: true } | { ok: false; error: { count: number } }>;
 }
 
-/** A single payment-source row with inline rename and in-use-protected delete. */
-function SourceRow({ source, onRename, onDelete }: SourceRowProps): JSX.Element {
+/**
+ * A single payment-source row, mirroring the category row: inline rename,
+ * in-use-protected delete, and an expandable nested sub-source manager
+ * (add/rename/delete cards/accounts under this source).
+ */
+function SourceRow({ source, familyId, onRename, onDelete }: SourceRowProps): JSX.Element {
+  const { forSource, addSubSource, updateSubSource, deleteSubSource } =
+    useSubSources(familyId);
+
+  const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(source.name);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [inUse, setInUse] = useState<string | null>(null);
+
+  // New sub-source inputs.
+  const [newNickname, setNewNickname] = useState('');
+  const [newLast4, setNewLast4] = useState('');
+  const [subError, setSubError] = useState<string | null>(null);
+
+  const subSources = forSource(source.name);
 
   const handleRename = async () => {
     setError(null);
@@ -950,9 +955,40 @@ function SourceRow({ source, onRename, onDelete }: SourceRowProps): JSX.Element 
     }
   };
 
+  const handleAddSub = async () => {
+    setSubError(null);
+    const result = await addSubSource({
+      source: source.name,
+      nickname: newNickname,
+      last4: newLast4 || null,
+    });
+    if (result.ok) {
+      setNewNickname('');
+      setNewLast4('');
+    } else {
+      setSubError(
+        result.error.kind === 'nickname-required'
+          ? SUBSOURCE_NICKNAME_REQUIRED_MESSAGE
+          : SUBSOURCE_INVALID_LAST4_MESSAGE,
+      );
+    }
+  };
+
   return (
-    <li className="flex flex-col gap-1.5 px-3 py-2 rounded-lg text-sm text-on-surface bg-surface-container-high/40 border border-outline-variant/20">
+    <li className="flex flex-col gap-2 px-3 py-2.5 rounded-lg text-sm text-on-surface bg-surface-container-high/40 border border-outline-variant/20">
       <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-label={expanded ? 'Collapse cards/accounts' : 'Expand cards/accounts'}
+          className="btn-ghost p-1 text-on-surface-variant"
+        >
+          <span className="material-symbols-outlined text-lg" aria-hidden="true">
+            {expanded ? 'expand_less' : 'expand_more'}
+          </span>
+        </button>
+
         {editing ? (
           <>
             <input
@@ -977,6 +1013,11 @@ function SourceRow({ source, onRename, onDelete }: SourceRowProps): JSX.Element 
         ) : (
           <>
             <span className="flex-1 truncate font-medium">{source.name}</span>
+            {subSources.length > 0 && (
+              <span className="text-xs text-on-surface-variant">
+                {subSources.length} card{subSources.length === 1 ? '' : 's'}
+              </span>
+            )}
             {confirming ? (
               <span className="flex items-center gap-2">
                 <button type="button" onClick={() => void handleDelete()} disabled={busy} className="btn-ghost px-2.5 py-1 text-xs text-error">
@@ -999,59 +1040,97 @@ function SourceRow({ source, onRename, onDelete }: SourceRowProps): JSX.Element 
           </>
         )}
       </div>
-      {error && <p role="alert" className="text-error text-xs">{error}</p>}
-      {inUse && <p role="alert" className="text-error text-xs">{inUse}</p>}
+      {error && <p role="alert" className="text-error text-xs ml-9">{error}</p>}
+      {inUse && <p role="alert" className="text-error text-xs ml-9">{inUse}</p>}
+
+      {/* Nested sub-source (cards/accounts) manager. */}
+      {expanded && (
+        <div className="ml-9 flex flex-col gap-2 border-l border-outline-variant/20 pl-3">
+          {subSources.length === 0 ? (
+            <p className="text-on-surface-variant text-xs">No cards/accounts yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {subSources.map((sub) => (
+                <SubSourceRow
+                  key={sub.id}
+                  sub={sub}
+                  onRename={(nickname, last4) =>
+                    updateSubSource(sub.id, source.name, {
+                      source: source.name,
+                      nickname,
+                      last4,
+                    })
+                  }
+                  onDelete={() => deleteSubSource(sub.id)}
+                />
+              ))}
+            </ul>
+          )}
+          <div className="flex flex-wrap gap-2 items-end">
+            <input
+              type="text"
+              value={newNickname}
+              onChange={(e) => {
+                setNewNickname(e.target.value);
+                if (subError) setSubError(null);
+              }}
+              placeholder="Nickname (e.g. HDFC Regalia)"
+              className={`${CONTROL_CLASS} flex-1 min-w-[10rem]`}
+              autoComplete="off"
+            />
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              value={newLast4}
+              onChange={(e) => {
+                setNewLast4(e.target.value);
+                if (subError) setSubError(null);
+              }}
+              placeholder="Last 4"
+              className={`${CONTROL_CLASS} w-24`}
+              autoComplete="off"
+            />
+            <button type="button" onClick={() => void handleAddSub()} className="btn-ghost px-3 py-2 text-xs">
+              Add card/account
+            </button>
+          </div>
+          {subError && <p role="alert" className="text-error text-xs">{subError}</p>}
+          <p className="text-[11px] text-on-surface-variant/60">
+            Store only a nickname and optional last 4 digits — never a full card number.
+          </p>
+        </div>
+      )}
     </li>
   );
 }
 
-/**
- * Sub-source management section (Req 5.1, 5.2, 5.3, 5.5).
- *
- * Provides a form to add a sub-source under a chosen {@link Source}, with a
- * required nickname and an optional last-4 identifier. On a missing nickname it
- * shows "Enter a nickname." (Req 5.3); on a malformed last-4 it shows "Last 4
- * digits must be exactly 4 digits." (Req 5.5). It lists existing sub-sources
- * grouped by source. Full card numbers are never stored (Req 5.6).
- */
-export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Element {
-  const { status, addSubSource, forSource, deleteSubSource } = useSubSources(familyId);
-  const { sources } = useSources(familyId);
+/** Props for {@link SubSourceRow}. */
+interface SubSourceRowProps {
+  sub: { id: string; nickname: string; last4?: string };
+  onRename: (
+    nickname: string,
+    last4: string | null,
+  ) => Promise<{ ok: true } | { ok: false; error: { kind: string } }>;
+  onDelete: () => Promise<{ ok: true } | { ok: false; error: { count: number } }>;
+}
 
-  const [source, setSource] = useState<string>('');
-  const [nickname, setNickname] = useState('');
-  const [last4, setLast4] = useState('');
+/** A single sub-source (card/account) row with inline rename and in-use delete. */
+function SubSourceRow({ sub, onRename, onDelete }: SubSourceRowProps): JSX.Element {
+  const [editing, setEditing] = useState(false);
+  const [nickname, setNickname] = useState(sub.nickname);
+  const [last4, setLast4] = useState(sub.last4 ?? '');
   const [error, setError] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState<string | null>(null);
-  const [isAdding, setIsAdding] = useState(false);
-  // Id of the sub-source awaiting delete confirmation (inline confirm state).
-  const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  // Id of the sub-source whose delete is in flight.
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  // Per-sub-source in-use message keyed by sub-source id (Req 5.10).
-  const [inUseById, setInUseById] = useState<Record<string, string>>({});
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const handleAdd = async () => {
-    if (isAdding) {
-      return;
-    }
+  const handleRename = async () => {
     setError(null);
-    setConfirmation(null);
-    if (source === '') {
-      setError('Select a source.');
-      return;
-    }
-    setIsAdding(true);
+    setBusy(true);
     try {
-      const result = await addSubSource({
-        source,
-        nickname,
-        last4: last4 || null,
-      });
+      const result = await onRename(nickname, last4 || null);
       if (result.ok) {
-        setNickname('');
-        setLast4('');
-        setConfirmation(`Added "${result.value.nickname}".`);
+        setEditing(false);
       } else {
         setError(
           result.error.kind === 'nickname-required'
@@ -1060,216 +1139,84 @@ export function SubSourceManager({ familyId }: SubSourceManagerProps): JSX.Eleme
         );
       }
     } finally {
-      setIsAdding(false);
+      setBusy(false);
     }
   };
 
-  const handleDelete = async (subSourceId: string) => {
-    if (deletingId !== null) {
-      return;
-    }
-    setConfirmingId(null);
-    setDeletingId(subSourceId);
-    // Clear any stale in-use message for this item before re-checking.
-    setInUseById((prev) => {
-      const next = { ...prev };
-      delete next[subSourceId];
-      return next;
-    });
+  const handleDelete = async () => {
+    setConfirming(false);
+    setError(null);
+    setBusy(true);
     try {
-      const result = await deleteSubSource(subSourceId);
+      const result = await onDelete();
       if (!result.ok) {
-        // Blocked: still referenced by expenses. Surface the count inline and
-        // leave the item in place (Req 5.10).
-        setInUseById((prev) => ({
-          ...prev,
-          [subSourceId]: inUseMessage(result.error.count),
-        }));
+        setError(inUseMessage(result.error.count));
       }
-      // On success the live subscription removes the item (Req 5.9).
     } finally {
-      setDeletingId(null);
+      setBusy(false);
     }
   };
 
   return (
-    <section
-      className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
-      aria-labelledby="subsources-heading"
-    >
-      <h2 id="subsources-heading" className="text-headline-md font-semibold text-on-surface">
-        Payment sub-sources
-      </h2>
-      <p className="text-sm text-on-surface-variant">
-        Store a nickname and, optionally, the last 4 digits only. Full card
-        numbers are never stored.
-      </p>
-
-      <div className="flex flex-wrap gap-3 items-end">
-        <label className={FIELD_CLASS}>
-          Source
-          <select
-            value={source}
-            onChange={(event) => setSource(event.target.value)}
-            disabled={isAdding}
-            className={CONTROL_CLASS}
-          >
-            <option value="">Select a source</option>
-            {sources.map((option) => (
-              <option key={option.id} value={option.name}>
-                {option.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={`${FIELD_CLASS} flex-1 min-w-[10rem]`}>
-          Nickname
-          <input
-            type="text"
-            value={nickname}
-            onChange={(event) => {
-              setNickname(event.target.value);
-              if (error) {
-                setError(null);
-              }
-            }}
-            disabled={isAdding}
-            className={CONTROL_CLASS}
-            autoComplete="off"
-            aria-invalid={error !== null}
-          />
-        </label>
-        <label className={FIELD_CLASS}>
-          Last 4 digits (optional)
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={4}
-            value={last4}
-            onChange={(event) => {
-              setLast4(event.target.value);
-              if (error) {
-                setError(null);
-              }
-            }}
-            disabled={isAdding}
-            className={`${CONTROL_CLASS} w-28`}
-            autoComplete="off"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => void handleAdd()}
-          disabled={isAdding}
-          aria-busy={isAdding}
-          className="btn-primary px-4 py-2.5"
-        >
-          {isAdding ? 'Adding…' : 'Add sub-source'}
-        </button>
-      </div>
-
-      {error && (
-        <p role="alert" className="text-error text-sm">
-          {error}
-        </p>
-      )}
-      {confirmation && (
-        <p role="status" className="text-primary-container text-sm">
-          {confirmation}
-        </p>
-      )}
-
-      <div className="flex flex-col gap-3">
-        <h3 className="text-label-caps uppercase text-on-surface-variant">
-          Existing sub-sources
-        </h3>
-        {status === 'loading' ? (
-          <p role="status" className="text-on-surface-variant">
-            Loading sub-sources…
-          </p>
-        ) : status === 'error' ? (
-          <p role="alert" className="text-error">
-            Sub-sources could not be loaded.
-          </p>
+    <li className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        {editing ? (
+          <>
+            <input
+              type="text"
+              value={nickname}
+              onChange={(e) => { setNickname(e.target.value); if (error) setError(null); }}
+              disabled={busy}
+              className={`${CONTROL_CLASS} flex-1`}
+              autoComplete="off"
+              aria-label={`Rename card/account ${sub.nickname}`}
+            />
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              value={last4}
+              onChange={(e) => { setLast4(e.target.value); if (error) setError(null); }}
+              disabled={busy}
+              className={`${CONTROL_CLASS} w-20`}
+              placeholder="Last 4"
+              autoComplete="off"
+            />
+            <button type="button" onClick={() => void handleRename()} disabled={busy} className="btn-ghost px-2 py-0.5 text-xs text-primary-container">
+              Save
+            </button>
+            <button type="button" onClick={() => { setEditing(false); setNickname(sub.nickname); setLast4(sub.last4 ?? ''); setError(null); }} disabled={busy} className="btn-ghost px-2 py-0.5 text-xs">
+              Cancel
+            </button>
+          </>
         ) : (
-          sources.map((option) => {
-            const items = forSource(option.name);
-            if (items.length === 0) {
-              return null;
-            }
-            return (
-              <div key={option.id} className="flex flex-col gap-1.5">
-                <h4 className="text-sm font-semibold text-on-surface">{option.name}</h4>
-                <ul className="flex flex-col gap-1">
-                  {items.map((subSource) => {
-                    const inUse = inUseById[subSource.id];
-                    const isConfirming = confirmingId === subSource.id;
-                    const isDeleting = deletingId === subSource.id;
-                    return (
-                      <li
-                        key={subSource.id}
-                        className="flex flex-col gap-1.5 text-sm text-on-surface-variant px-3 py-1.5 rounded-lg bg-surface-container-high/30 border border-outline-variant/20"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="flex-1 truncate">
-                            {subSource.nickname}
-                            {subSource.last4 ? ` ••${subSource.last4}` : ''}
-                          </span>
-                          {isConfirming ? (
-                            <span className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void handleDelete(subSource.id)}
-                                disabled={isDeleting}
-                                aria-busy={isDeleting}
-                                className="btn-ghost px-2.5 py-1 text-xs text-error"
-                              >
-                                {isDeleting ? 'Deleting…' : 'Confirm'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setConfirmingId(null)}
-                                disabled={isDeleting}
-                                className="btn-ghost px-2.5 py-1 text-xs"
-                              >
-                                Cancel
-                              </button>
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setInUseById((prev) => {
-                                  const next = { ...prev };
-                                  delete next[subSource.id];
-                                  return next;
-                                });
-                                setConfirmingId(subSource.id);
-                              }}
-                              disabled={deletingId !== null}
-                              aria-label={`Delete sub-source ${subSource.nickname}`}
-                              className="btn-ghost p-1.5 text-on-surface-variant hover:text-error"
-                            >
-                              <span className="material-symbols-outlined text-lg" aria-hidden="true">
-                                delete
-                              </span>
-                            </button>
-                          )}
-                        </div>
-                        {inUse && (
-                          <p role="alert" className="text-error text-xs">
-                            {inUse}
-                          </p>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            );
-          })
+          <>
+            <span className="flex-1 truncate text-on-surface-variant">
+              {sub.nickname}{sub.last4 ? ` ••${sub.last4}` : ''}
+            </span>
+            {confirming ? (
+              <span className="flex items-center gap-2">
+                <button type="button" onClick={() => void handleDelete()} disabled={busy} className="btn-ghost px-2 py-0.5 text-xs text-error">
+                  {busy ? 'Deleting…' : 'Confirm'}
+                </button>
+                <button type="button" onClick={() => setConfirming(false)} disabled={busy} className="btn-ghost px-2 py-0.5 text-xs">
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <>
+                <button type="button" onClick={() => setEditing(true)} aria-label={`Rename card/account ${sub.nickname}`} className="btn-ghost p-1 text-on-surface-variant hover:text-primary-container">
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">edit</span>
+                </button>
+                <button type="button" onClick={() => setConfirming(true)} aria-label={`Delete card/account ${sub.nickname}`} className="btn-ghost p-1 text-on-surface-variant hover:text-error">
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">delete</span>
+                </button>
+              </>
+            )}
+          </>
         )}
       </div>
-    </section>
+      {error && <p role="alert" className="text-error text-xs">{error}</p>}
+    </li>
   );
 }
