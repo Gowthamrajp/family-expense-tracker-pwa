@@ -18,18 +18,29 @@ export default defineConfig({
       devOptions: {
         enabled: false,
       },
-      includeAssets: ['pwa-192x192.png', 'pwa-512x512.png'],
+      includeAssets: [
+        'favicon-32.png',
+        'apple-touch-icon.png',
+        'icon.svg',
+        'pwa-192x192.png',
+        'pwa-512x512.png',
+      ],
       manifest: {
-        name: 'Family Expense Tracker',
-        short_name: 'Expenses',
+        name: 'FamilyVault — Family Expense Tracker',
+        short_name: 'FamilyVault',
         description:
           'Record family expenses and view spending through a visual dashboard.',
         display: 'standalone',
         start_url: '/',
         scope: '/',
-        theme_color: '#1e3a5f',
-        background_color: '#ffffff',
+        theme_color: '#0d0e0f',
+        background_color: '#0d0e0f',
         icons: [
+          {
+            src: 'icon.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+          },
           {
             src: 'pwa-192x192.png',
             sizes: '192x192',
