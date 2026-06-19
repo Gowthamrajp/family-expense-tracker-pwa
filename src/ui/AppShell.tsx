@@ -67,7 +67,9 @@ const NAV_LINKS: ReadonlyArray<{
 
 /** Subset of {@link NAV_LINKS} shown in the mobile bottom nav (kept uncrowded). */
 const BOTTOM_NAV_LINKS = NAV_LINKS.filter((link) =>
-  ['/', '/expenses', '/add', '/insights', '/settings'].includes(String(link.to)),
+  ['/', '/expenses', '/insights', '/recurring', '/add', '/settings'].includes(
+    String(link.to),
+  ),
 );
 
 /** Shared className for a desktop sidebar nav link, depending on active state. */
