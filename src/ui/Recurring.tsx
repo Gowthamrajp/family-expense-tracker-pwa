@@ -22,6 +22,7 @@ import { useAuth } from '../state/AuthProvider';
 import { useCategories } from '../state/useCategories';
 import { useRecurring, type RecurringFormErrors } from '../state/useRecurring';
 import { useSources } from '../state/useSources';
+import { useSubCategories } from '../state/useSubCategories';
 import { useSubSources } from '../state/useSubSources';
 import { Money } from './Money';
 import { Loader } from './Loader';
@@ -68,6 +69,7 @@ export interface RecurringProps {
 export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element {
   const { member } = useAuth();
   const { categories } = useCategories(familyId);
+  const { forCategory: subCategoriesForCategory, subCategories } = useSubCategories(familyId);
   const { forSource } = useSubSources(familyId);
   const { sources } = useSources(familyId);
   const { rules, status, addRule, deleteRule, setRuleActive } = useRecurring(
@@ -77,6 +79,7 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
 
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [subCategoryId, setSubCategoryId] = useState('');
   const [source, setSource] = useState<string>('');
   const [subSourceId, setSubSourceId] = useState('');
   const [description, setDescription] = useState('');
@@ -91,10 +94,28 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
     () => new Map(categories.map((c) => [c.id, c.name])),
     [categories],
   );
+  const subCategoryNameById = useMemo(
+    () => new Map(subCategories.map((s) => [s.id, s.name])),
+    [subCategories],
+  );
+  // Sub-categories available under the chosen category. A sub-category is
+  // mandatory when the category has any defined (mirrors the expense form).
+  const subCategoryOptions = useMemo(
+    () => (categoryId !== '' ? subCategoriesForCategory(categoryId) : []),
+    [categoryId, subCategoriesForCategory],
+  );
   const subSourceOptions = forSource(source);
 
   const handleAdd = async () => {
     if (isAdding) {
+      return;
+    }
+    // Client-side guard: require a sub-category when the chosen category has
+    // any, so recurring expenses are classified to the same depth as manual
+    // ones (keeps insights/budgets consistent).
+    if (subCategoryOptions.length > 0 && subCategoryId === '') {
+      setErrors({ subCategory: true });
+      setConfirmation(null);
       return;
     }
     setErrors({});
@@ -104,6 +125,7 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
       const result = await addRule({
         amount,
         categoryId,
+        subCategoryId,
         source,
         subSourceId,
         description,
@@ -115,6 +137,8 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
         setDescription('');
         setStartDate('');
         setSubSourceId('');
+        setSubCategoryId('');
+        setCategoryId('');
         setConfirmation('Recurring payment added.');
       } else {
         setErrors(result.error);
@@ -189,7 +213,15 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
             Category
             <select
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
+              onChange={(e) => {
+                setCategoryId(e.target.value);
+                // Reset sub-category whenever the category changes so a stale
+                // sub-category from a different category is never submitted.
+                setSubCategoryId('');
+                if (errors.category || errors.subCategory) {
+                  setErrors({});
+                }
+              }}
               disabled={isAdding}
               aria-invalid={errors.category === true}
               className={CONTROL_CLASS}
@@ -203,6 +235,31 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
               <span role="alert" className="text-error text-xs">Select a category.</span>
             )}
           </label>
+          {subCategoryOptions.length > 0 && (
+            <label className={FIELD_CLASS}>
+              Sub-category
+              <select
+                value={subCategoryId}
+                onChange={(e) => {
+                  setSubCategoryId(e.target.value);
+                  if (errors.subCategory) {
+                    setErrors({});
+                  }
+                }}
+                disabled={isAdding}
+                aria-invalid={errors.subCategory === true}
+                className={CONTROL_CLASS}
+              >
+                <option value="">Select a sub-category</option>
+                {subCategoryOptions.map((sc) => (
+                  <option key={sc.id} value={sc.id}>{sc.name}</option>
+                ))}
+              </select>
+              {errors.subCategory && (
+                <span role="alert" className="text-error text-xs">Select a sub-category.</span>
+              )}
+            </label>
+          )}
           <label className={FIELD_CLASS}>
             Source
             <select
@@ -295,6 +352,10 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
           <ul className="flex flex-col gap-3">
             {rules.map((rule) => {
               const categoryName = categoryNameById.get(rule.categoryId) ?? 'Category';
+              const subCategoryName =
+                rule.subCategoryId !== undefined
+                  ? subCategoryNameById.get(rule.subCategoryId)
+                  : undefined;
               const isDeleting = deletingId === rule.id;
               return (
                 <li
@@ -307,7 +368,12 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-on-surface">{categoryName}</span>
+                      <span className="font-semibold text-on-surface">
+                        {categoryName}
+                        {subCategoryName !== undefined && (
+                          <span className="text-on-surface-variant font-normal"> · {subCategoryName}</span>
+                        )}
+                      </span>
                       <span className="text-xs px-2 py-0.5 rounded-full bg-surface-container-high/60 text-on-surface-variant uppercase tracking-wide">
                         {frequencyLabel(rule.frequency)}
                       </span>

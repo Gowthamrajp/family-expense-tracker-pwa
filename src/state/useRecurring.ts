@@ -32,6 +32,7 @@ export type RecurringStatus = 'loading' | 'ready' | 'error';
 export interface RecurringFormInput {
   amount: string;
   categoryId: string;
+  subCategoryId: string;
   source: string;
   subSourceId: string;
   description: string;
@@ -44,6 +45,7 @@ export interface RecurringFormInput {
 export interface RecurringFormErrors {
   amount?: boolean;
   category?: boolean;
+  subCategory?: boolean;
   source?: boolean;
   frequency?: boolean;
   startDate?: boolean;
@@ -145,6 +147,9 @@ export function useRecurring(
       };
       if (input.subSourceId !== '') {
         ruleInput.subSourceId = input.subSourceId;
+      }
+      if (input.subCategoryId !== '') {
+        ruleInput.subCategoryId = input.subCategoryId;
       }
 
       const id = await recurringRepository.addRule(familyId, ruleInput, member);

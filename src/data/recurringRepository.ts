@@ -80,6 +80,9 @@ function readRule(snapshot: QueryDocumentSnapshot<DocumentData>): RecurringRule 
   if (data.subSourceId != null) {
     rule.subSourceId = data.subSourceId;
   }
+  if (data.subCategoryId != null) {
+    rule.subCategoryId = data.subCategoryId;
+  }
   return rule;
 }
 
@@ -180,6 +183,9 @@ export const recurringRepository: RecurringRepository = {
     if (input.subSourceId !== undefined && input.subSourceId !== '') {
       docData.subSourceId = input.subSourceId;
     }
+    if (input.subCategoryId !== undefined && input.subCategoryId !== '') {
+      docData.subCategoryId = input.subCategoryId;
+    }
     const ref = await addDoc(recurringCollection(familyId), docData);
     return ref.id;
   },
@@ -225,6 +231,9 @@ export const recurringRepository: RecurringRepository = {
           };
           if (rule.subSourceId !== undefined) {
             input.subSourceId = rule.subSourceId;
+          }
+          if (rule.subCategoryId !== undefined) {
+            input.subCategoryId = rule.subCategoryId;
           }
           await expenseRepository.addExpense(familyId, input, member);
           created += 1;

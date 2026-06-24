@@ -457,6 +457,8 @@ export interface RecurringRule {
   amount: number;
   /** Family Category id the generated Expense is filed under. */
   categoryId: string;
+  /** Optional SubCategory id (under {@link categoryId}) of the generated Expense. */
+  subCategoryId?: string;
   /** Funding method of the generated Expense. */
   source: Source;
   /** Optional SubSource id of the generated Expense. */
@@ -485,6 +487,7 @@ export interface RecurringRule {
 export interface RecurringRuleInput {
   amount: number;
   categoryId: string;
+  subCategoryId?: string;
   source: Source;
   subSourceId?: string;
   description: string;
@@ -498,6 +501,7 @@ export interface RecurringRuleInput {
 export interface RecurringRuleDocument {
   amount: number;
   categoryId: string;
+  subCategoryId?: string;
   source: string;
   subSourceId?: string;
   description: string;
