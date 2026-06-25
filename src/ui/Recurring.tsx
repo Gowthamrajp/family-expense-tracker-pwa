@@ -17,6 +17,7 @@ import { useMemo, useState } from 'react';
 import {
   RECURRING_FREQUENCIES,
   type RecurringFrequency,
+  type RecurringRule,
 } from '../domain/types';
 import { useAuth } from '../state/AuthProvider';
 import { useCategories } from '../state/useCategories';
@@ -85,10 +86,13 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
   const [description, setDescription] = useState('');
   const [frequency, setFrequency] = useState<RecurringFrequency>('monthly');
   const [startDate, setStartDate] = useState('');
+  const [backfill, setBackfill] = useState(false);
   const [errors, setErrors] = useState<RecurringFormErrors>({});
   const [confirmation, setConfirmation] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Rule pending a delete decision (retain vs. remove past transactions).
+  const [pendingDelete, setPendingDelete] = useState<RecurringRule | null>(null);
 
   const categoryNameById = useMemo(
     () => new Map(categories.map((c) => [c.id, c.name])),
@@ -122,16 +126,19 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
     setConfirmation(null);
     setIsAdding(true);
     try {
-      const result = await addRule({
-        amount,
-        categoryId,
-        subCategoryId,
-        source,
-        subSourceId,
-        description,
-        frequency,
-        startDate,
-      });
+      const result = await addRule(
+        {
+          amount,
+          categoryId,
+          subCategoryId,
+          source,
+          subSourceId,
+          description,
+          frequency,
+          startDate,
+        },
+        backfill,
+      );
       if (result.ok) {
         setAmount('');
         setDescription('');
@@ -139,7 +146,12 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
         setSubSourceId('');
         setSubCategoryId('');
         setCategoryId('');
-        setConfirmation('Recurring payment added.');
+        setBackfill(false);
+        setConfirmation(
+          backfill
+            ? 'Recurring payment added and past transactions backfilled.'
+            : 'Recurring payment added.',
+        );
       } else {
         setErrors(result.error);
       }
@@ -148,10 +160,17 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
     }
   };
 
-  const handleDelete = async (ruleId: string) => {
-    setDeletingId(ruleId);
+  // Perform the delete once the member has chosen whether to also remove the
+  // rule's previously-generated transactions.
+  const confirmDelete = async (deletePrevious: boolean) => {
+    const rule = pendingDelete;
+    if (rule === null) {
+      return;
+    }
+    setPendingDelete(null);
+    setDeletingId(rule.id);
     try {
-      await deleteRule(ruleId);
+      await deleteRule(rule.id, deletePrevious);
     } finally {
       setDeletingId(null);
     }
@@ -322,6 +341,22 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
             />
           </label>
         </div>
+        <label className="flex items-start gap-3 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={backfill}
+            onChange={(e) => setBackfill(e.target.checked)}
+            disabled={isAdding}
+            className="mt-1 h-4 w-4 accent-primary-container"
+          />
+          <span className="text-sm text-on-surface">
+            Backfill past transactions
+            <span className="block text-xs text-on-surface-variant">
+              Create expenses for every occurrence from the start date up to
+              today.
+            </span>
+          </span>
+        </label>
         <button
           type="button"
           onClick={() => void handleAdd()}
@@ -409,7 +444,7 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
                     </button>
                     <button
                       type="button"
-                      onClick={() => void handleDelete(rule.id)}
+                      onClick={() => setPendingDelete(rule)}
                       disabled={isDeleting}
                       aria-busy={isDeleting}
                       aria-label="Delete recurring payment"
@@ -424,6 +459,86 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
           </ul>
         )}
       </section>
+
+      {/* Delete confirmation: choose whether to also remove the rule's
+          previously-generated transactions, or retain them. */}
+      {pendingDelete !== null && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setPendingDelete(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Delete recurring payment"
+            data-testid="recurring-delete-dialog"
+            className="glass-card p-card_padding w-full max-w-md flex flex-col gap-4"
+          >
+            <div className="flex items-center gap-3">
+              <span className="shrink-0 w-10 h-10 rounded-lg bg-error/10 flex items-center justify-center text-error">
+                <span className="material-symbols-outlined" aria-hidden="true">delete</span>
+              </span>
+              <h3 className="text-headline-md font-semibold text-on-surface">
+                Delete recurring payment
+              </h3>
+            </div>
+            <p className="text-sm text-on-surface-variant">
+              Stop this recurring payment from generating future transactions.
+              What should happen to the{' '}
+              {(() => {
+                const name = categoryNameById.get(pendingDelete.categoryId) ?? 'this rule';
+                return <span className="text-on-surface font-medium">{name}</span>;
+              })()}{' '}
+              transactions it already created?
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => void confirmDelete(false)}
+                data-testid="recurring-delete-retain"
+                className="btn-ghost px-4 py-3 flex items-center gap-2 text-left"
+              >
+                <span className="material-symbols-outlined text-lg text-primary-container" aria-hidden="true">
+                  history
+                </span>
+                <span>
+                  <span className="block text-on-surface font-medium">Keep past transactions</span>
+                  <span className="block text-xs text-on-surface-variant">
+                    Remove the rule only; previously logged expenses stay.
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDelete(true)}
+                data-testid="recurring-delete-remove"
+                className="btn-ghost px-4 py-3 flex items-center gap-2 text-left text-error border-error/30 hover:bg-error/10"
+              >
+                <span className="material-symbols-outlined text-lg" aria-hidden="true">
+                  delete_sweep
+                </span>
+                <span>
+                  <span className="block font-medium">Delete past transactions too</span>
+                  <span className="block text-xs text-on-surface-variant">
+                    Remove the rule and every expense it generated.
+                  </span>
+                </span>
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPendingDelete(null)}
+              className="btn-ghost px-4 py-2 text-sm text-on-surface-variant self-end"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

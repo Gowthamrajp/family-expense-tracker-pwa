@@ -120,6 +120,9 @@ export function toFirestore(
   if (input.subSourceId !== undefined) {
     doc.subSourceId = input.subSourceId;
   }
+  if (input.recurringRuleId !== undefined) {
+    doc.recurringRuleId = input.recurringRuleId;
+  }
 
   return doc;
 }
@@ -197,6 +200,9 @@ export function fromFirestore(id: string, doc: ExpenseDocument): Expense {
   }
   if (doc.subSourceId !== undefined) {
     expense.subSourceId = doc.subSourceId;
+  }
+  if (doc.recurringRuleId !== undefined) {
+    expense.recurringRuleId = doc.recurringRuleId;
   }
   if (doc.recordedByName !== undefined) {
     expense.recordedByName = doc.recordedByName;

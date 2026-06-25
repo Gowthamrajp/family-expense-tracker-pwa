@@ -113,8 +113,28 @@ export interface RecurringRepository {
     member: FamilyMember,
   ): Promise<string>;
 
+  /**
+   * Persist a new recurring rule AND immediately backfill expenses for every
+   * occurrence from its start date through today (each tagged with the rule
+   * id), advancing `lastRunDate` so the regular catch-up pass won't duplicate
+   * them. Resolves with the new rule id and how many expenses were created.
+   */
+  addRuleWithBackfill(
+    familyId: string,
+    input: RecurringRuleInput,
+    member: FamilyMember,
+    today?: Date,
+  ): Promise<{ id: string; created: number }>;
+
   /** Delete a recurring rule. Does not delete already-generated Expenses. */
   deleteRule(familyId: string, ruleId: string): Promise<void>;
+
+  /**
+   * Delete a recurring rule and also remove every expense it generated
+   * (matched on `recurringRuleId`). Resolves with how many expenses were
+   * deleted alongside the rule.
+   */
+  deleteRuleAndExpenses(familyId: string, ruleId: string): Promise<number>;
 
   /** Pause or resume a recurring rule. */
   setRuleActive(
@@ -190,8 +210,87 @@ export const recurringRepository: RecurringRepository = {
     return ref.id;
   },
 
+  async addRuleWithBackfill(
+    familyId: string,
+    input: RecurringRuleInput,
+    member: FamilyMember,
+    today: Date = new Date(),
+  ): Promise<{ id: string; created: number }> {
+    // Persist the rule first so generated expenses can reference its id.
+    const id = await this.addRule(familyId, input, member);
+
+    // Build a transient rule object to drive the pure scheduler over the full
+    // range [startDate .. today]. lastRunDate is null so it backfills from the
+    // start date.
+    const rule: RecurringRule = {
+      id,
+      amount: input.amount,
+      categoryId: input.categoryId,
+      source: input.source,
+      description: input.description,
+      frequency: input.frequency,
+      startDate: input.startDate,
+      lastRunDate: null,
+      active: true,
+      createdBy: member.uid,
+      createdAt: today,
+    };
+    if (input.subSourceId !== undefined) {
+      rule.subSourceId = input.subSourceId;
+    }
+    if (input.subCategoryId !== undefined) {
+      rule.subCategoryId = input.subCategoryId;
+    }
+
+    const due = dueOccurrences(rule, today);
+    let created = 0;
+    for (const occurrence of due) {
+      const expenseInput: ExpenseInput = {
+        amount: rule.amount,
+        category: 'Other',
+        categoryId: rule.categoryId,
+        source: rule.source,
+        date: occurrence,
+        description: rule.description,
+        recurringRuleId: id,
+      };
+      if (rule.subSourceId !== undefined) {
+        expenseInput.subSourceId = rule.subSourceId;
+      }
+      if (rule.subCategoryId !== undefined) {
+        expenseInput.subCategoryId = rule.subCategoryId;
+      }
+      await expenseRepository.addExpense(familyId, expenseInput, member);
+      created += 1;
+    }
+
+    // Advance lastRunDate to the final backfilled occurrence so the regular
+    // catch-up pass on app open does not regenerate these.
+    if (due.length > 0) {
+      await updateDoc(doc(recurringCollection(familyId), id), {
+        lastRunDate: Timestamp.fromDate(due[due.length - 1]),
+      });
+    }
+
+    return { id, created };
+  },
+
   async deleteRule(familyId: string, ruleId: string): Promise<void> {
     await deleteDoc(doc(recurringCollection(familyId), ruleId));
+  },
+
+  async deleteRuleAndExpenses(
+    familyId: string,
+    ruleId: string,
+  ): Promise<number> {
+    // Remove the generated expenses first, then the rule itself. If the
+    // expense cleanup fails the rule remains, so the user can retry.
+    const deleted = await expenseRepository.deleteExpensesByRecurringRule(
+      familyId,
+      ruleId,
+    );
+    await deleteDoc(doc(recurringCollection(familyId), ruleId));
+    return deleted;
   },
 
   async setRuleActive(
@@ -235,6 +334,7 @@ export const recurringRepository: RecurringRepository = {
           if (rule.subCategoryId !== undefined) {
             input.subCategoryId = rule.subCategoryId;
           }
+          input.recurringRuleId = rule.id;
           await expenseRepository.addExpense(familyId, input, member);
           created += 1;
         }

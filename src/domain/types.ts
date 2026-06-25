@@ -208,6 +208,12 @@ export interface ExpenseInput {
   subCategoryId?: string;
   /** Optional reference to a {@link SubSource} (Req 3.8). */
   subSourceId?: string;
+  /**
+   * Id of the {@link RecurringRule} that generated this expense, when it was
+   * materialized from a recurring payment (manual entries omit it). Lets the
+   * app optionally remove a rule's generated expenses when the rule is deleted.
+   */
+  recurringRuleId?: string;
   date: Date;
   description: string;
 }
@@ -271,6 +277,8 @@ export interface ExpenseDocument {
   subCategoryId?: string;
   /** Family SubSource id, when selected (Req 3.8). */
   subSourceId?: string;
+  /** Id of the {@link RecurringRule} that generated this expense, when any. */
+  recurringRuleId?: string;
   date: FirestoreTimestamp;
   description: string;
   /** request.auth.uid of the submitter. */

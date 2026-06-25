@@ -55,12 +55,20 @@ export interface RecurringFormErrors {
 export interface UseRecurringResult {
   rules: RecurringRule[];
   status: RecurringStatus;
-  /** Validate and persist a new recurring rule. Returns errors without writing when invalid. */
+  /**
+   * Validate and persist a new recurring rule. Returns errors without writing
+   * when invalid. When `backfill` is true, also generates expenses for every
+   * occurrence from the rule's start date through today.
+   */
   addRule(
     input: RecurringFormInput,
+    backfill?: boolean,
   ): Promise<Result<RecurringRule, RecurringFormErrors>>;
-  /** Delete a recurring rule (does not remove already-generated expenses). */
-  deleteRule(ruleId: string): Promise<void>;
+  /**
+   * Delete a recurring rule. When `deletePrevious` is true, also removes every
+   * expense the rule generated; otherwise those expenses are retained.
+   */
+  deleteRule(ruleId: string, deletePrevious?: boolean): Promise<void>;
   /** Pause or resume a recurring rule. */
   setRuleActive(ruleId: string, active: boolean): Promise<void>;
 }
@@ -109,6 +117,7 @@ export function useRecurring(
   const addRule = useCallback(
     async (
       input: RecurringFormInput,
+      backfill = false,
     ): Promise<Result<RecurringRule, RecurringFormErrors>> => {
       const errors: RecurringFormErrors = {};
 
@@ -152,7 +161,11 @@ export function useRecurring(
         ruleInput.subCategoryId = input.subCategoryId;
       }
 
-      const id = await recurringRepository.addRule(familyId, ruleInput, member);
+      // When backfill is requested, generate expenses for every occurrence
+      // from the start date through today; otherwise just create the rule.
+      const id = backfill
+        ? (await recurringRepository.addRuleWithBackfill(familyId, ruleInput, member)).id
+        : await recurringRepository.addRule(familyId, ruleInput, member);
       return ok({
         id,
         ...ruleInput,
@@ -166,11 +179,15 @@ export function useRecurring(
   );
 
   const deleteRule = useCallback(
-    async (ruleId: string): Promise<void> => {
+    async (ruleId: string, deletePrevious = false): Promise<void> => {
       if (familyId === null) {
         return;
       }
-      await recurringRepository.deleteRule(familyId, ruleId);
+      if (deletePrevious) {
+        await recurringRepository.deleteRuleAndExpenses(familyId, ruleId);
+      } else {
+        await recurringRepository.deleteRule(familyId, ruleId);
+      }
     },
     [familyId],
   );
