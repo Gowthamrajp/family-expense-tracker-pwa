@@ -71,9 +71,13 @@ export default {
       },
       spacing: {
         base: '8px',
-        grid_gap: '24px',
-        container_padding: '40px',
-        card_padding: '32px',
+        // Fluid tokens: compact on phones, full size on larger screens. These
+        // are used ungated (e.g. `p-card_padding`, `gap-grid_gap`) across every
+        // screen, so making them clamp-based gives all pages responsive
+        // spacing without per-component overrides.
+        grid_gap: 'clamp(16px, 3vw, 24px)',
+        container_padding: 'clamp(20px, 4vw, 40px)',
+        card_padding: 'clamp(16px, 4vw, 32px)',
         section_margin: '64px',
       },
       fontFamily: {
@@ -81,8 +85,11 @@ export default {
       },
       fontSize: {
         'display-xl': ['72px', { lineHeight: '80px', letterSpacing: '-0.04em', fontWeight: '800' }],
-        'headline-lg': ['40px', { lineHeight: '48px', letterSpacing: '-0.02em', fontWeight: '700' }],
-        'headline-md': ['24px', { lineHeight: '32px', letterSpacing: '-0.01em', fontWeight: '600' }],
+        // Fluid headline sizes: smaller on phones, full size from tablet up.
+        // Used ungated across screen titles/section headers, so clamping here
+        // keeps every page's headings proportionate on small viewports.
+        'headline-lg': ['clamp(26px, 6vw, 40px)', { lineHeight: '1.15', letterSpacing: '-0.02em', fontWeight: '700' }],
+        'headline-md': ['clamp(20px, 4.5vw, 24px)', { lineHeight: '1.25', letterSpacing: '-0.01em', fontWeight: '600' }],
         'body-lg': ['18px', { lineHeight: '28px', fontWeight: '400' }],
         'body-md': ['16px', { lineHeight: '24px', fontWeight: '400' }],
         'label-caps': ['12px', { lineHeight: '16px', letterSpacing: '0.08em', fontWeight: '600' }],

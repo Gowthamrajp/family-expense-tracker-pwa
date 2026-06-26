@@ -467,7 +467,7 @@ export function ExpenseList({
             onChange={(e) => setSourceFilter(e.target.value as Source | 'all')}
             aria-label="Filter by source"
             data-testid="expense-filter-source"
-            className="ghost-input px-3 py-2.5 text-sm"
+            className="ghost-input px-3 py-2.5 text-sm flex-1 min-w-[8rem] sm:flex-none"
           >
             <option value="all">All sources</option>
             {SOURCES.map((s) => (
@@ -479,7 +479,7 @@ export function ExpenseList({
             onChange={(e) => setCategoryFilter(e.target.value)}
             aria-label="Filter by category"
             data-testid="expense-filter-category"
-            className="ghost-input px-3 py-2.5 text-sm"
+            className="ghost-input px-3 py-2.5 text-sm flex-1 min-w-[8rem] sm:flex-none"
           >
             <option value="all">All categories</option>
             {categories.map((c) => (
