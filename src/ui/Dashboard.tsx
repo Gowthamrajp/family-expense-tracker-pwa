@@ -32,128 +32,25 @@
  * {@link ../domain/aggregation}. Charts are wrapped in Recharts'
  * `ResponsiveContainer` and themed to the dark glass aesthetic.
  */
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { useState } from 'react';
 
 import { useExpenses } from '../state/useExpenses';
 import { useIncome } from '../state/useIncome';
 import { useCategories } from '../state/useCategories';
-import {
-  groupByMonth,
-  groupByReference,
-  groupBySource,
-  totalAmount,
-} from '../domain/aggregation';
-import type { GroupTotal } from '../domain/types';
-import { Money, formatINR } from './Money';
+import { useSubCategories } from '../state/useSubCategories';
+import { useSubSources } from '../state/useSubSources';
+import { totalAmount } from '../domain/aggregation';
+import { Money } from './Money';
 import { Loader } from './Loader';
 import { Insights } from './Insights';
+import { SpendingChartCard } from './SpendingChartCard';
+import { CategoryDetail } from './CategoryDetail';
 
 /** Message shown when no expenses exist for the family group (Req 4.6). */
 const EMPTY_STATE_MESSAGE = 'No expenses have been recorded yet.';
 
 /** Message shown when the dashboard data could not be loaded (Req 4.7). */
 const LOAD_ERROR_MESSAGE = 'Dashboard data could not be loaded.';
-
-/** Format a monetary amount as INR currency (shared helper). */
-function formatAmount(amount: number): string {
-  return formatINR(amount);
-}
-
-/** Neon-cyan accent used across chart bars/gradients. */
-const ACCENT = '#00f5ff';
-
-/** Shared dark tooltip styling matching the glass theme. */
-const TOOLTIP_CONTENT_STYLE: React.CSSProperties = {
-  background: '#1f2021',
-  border: '1px solid rgba(0, 245, 255, 0.3)',
-  borderRadius: 12,
-  color: '#e4e2e3',
-};
-
-/** Axis tick text styling (on-surface-variant). */
-const AXIS_TICK = { fill: '#b9caca', fontSize: 12 } as const;
-
-/** Props for {@link ChartSection}. */
-interface ChartSectionProps {
-  title: string;
-  testId: string;
-  data: GroupTotal[];
-  gradientId: string;
-}
-
-/**
- * Render a titled bar chart of group totals inside a responsive container.
- *
- * The chart plots one bar per {@link GroupTotal}, with the group key on the X
- * axis and its total on the Y axis, themed with a vertical cyan gradient,
- * muted grid lines, and a dark tooltip.
- */
-function ChartSection({
-  title,
-  testId,
-  data,
-  gradientId,
-}: ChartSectionProps): JSX.Element {
-  return (
-    <section
-      className="glass-card glass-card-hover p-4 md:p-card_padding flex flex-col gap-3 md:gap-4"
-      data-testid={testId}
-      aria-label={title}
-    >
-      <h2 className="text-base md:text-headline-md font-semibold text-on-surface">{title}</h2>
-      <div className="w-full h-[260px] md:h-[320px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 8, right: 16, bottom: 64, left: 8 }}>
-            <defs>
-              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={ACCENT} stopOpacity={0.9} />
-                <stop offset="100%" stopColor={ACCENT} stopOpacity={0.25} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-            {/* Force every entity name to render (Recharts auto-skips when
-                crowded). Angle the labels and give the axis extra height so all
-                category/source/month names stay readable. */}
-            <XAxis
-              dataKey="key"
-              tick={AXIS_TICK}
-              tickLine={false}
-              stroke="#3a494a"
-              interval={0}
-              angle={-40}
-              textAnchor="end"
-              height={64}
-              tickMargin={8}
-            />
-            <YAxis tick={AXIS_TICK} tickLine={false} stroke="#3a494a" width={44} />
-            <Tooltip
-              cursor={{ fill: 'rgba(0,245,255,0.06)' }}
-              contentStyle={TOOLTIP_CONTENT_STYLE}
-              labelStyle={{ color: '#b9caca' }}
-              formatter={(value) =>
-                formatAmount(typeof value === 'number' ? value : Number(value))
-              }
-            />
-            <Bar dataKey="total" fill={`url(#${gradientId})`} name={title} radius={[6, 6, 0, 0]}>
-              {data.map((entry) => (
-                <Cell key={entry.key} fill={`url(#${gradientId})`} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </section>
-  );
-}
 
 /**
  * Render the spending dashboard with total, category/source/month charts, and
@@ -181,11 +78,21 @@ export function Dashboard({
   // human-readable Category name for the by-category chart (Req 7.2). The hook
   // shares the same family scope as `useExpenses`, so the labels stay in sync.
   const { categories } = useCategories(familyId);
+  const { subCategories } = useSubCategories(familyId);
+  const { subSources } = useSubSources(familyId);
+
+  // Category drill-down opened from the spending chart, or null when closed.
+  const [selectedCategory, setSelectedCategory] = useState<
+    { id: string | null; name: string } | null
+  >(null);
 
   // Map categoryId -> display name so the category chart shows real family
   // Category names rather than ids. Recomputes when the category list changes,
   // keeping labels live as categories are added/renamed (Req 7.5).
   const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
+  // Reverse lookup so a chart label can resolve back to its category id for the
+  // drill-down (null for the "Uncategorized" bucket).
+  const categoryIdByName = new Map(categories.map((category) => [category.name, category.id]));
 
   // Aggregations recompute on every render from the current expenses, so the
   // total and charts always reflect the latest snapshot delivered by the live
@@ -198,14 +105,6 @@ export function Dashboard({
   // uses the same cents-accurate summation as expenses.
   const totalIncomeAmount = totalAmount(incomes);
   const netBalance = Math.round((totalIncomeAmount - total) * 100) / 100;
-  const byCategory = groupByReference(
-    expenses,
-    (expense) => expense.categoryId,
-    (id) => categoryNameById.get(id) ?? 'Unknown',
-    'Uncategorized',
-  );
-  const bySource = groupBySource(expenses);
-  const byMonth = groupByMonth(expenses);
 
   const hasExpenses = expenses.length > 0;
   // The summary tiles are meaningful when the family has any cash-flow data —
@@ -313,32 +212,15 @@ export function Dashboard({
           </div>
 
           {hasExpenses && (
-            <>
-              <div className="col-span-12 lg:col-span-7">
-                <ChartSection
-                  title="Spending by category"
-                  testId="dashboard-category-chart"
-                  data={byCategory}
-                  gradientId="grad-category"
-                />
-              </div>
-              <div className="col-span-12 lg:col-span-5">
-                <ChartSection
-                  title="Spending by source"
-                  testId="dashboard-source-chart"
-                  data={bySource}
-                  gradientId="grad-source"
-                />
-              </div>
-              <div className="col-span-12">
-                <ChartSection
-                  title="Spending by month"
-                  testId="dashboard-month-chart"
-                  data={byMonth}
-                  gradientId="grad-month"
-                />
-              </div>
-            </>
+            <div className="col-span-12">
+              <SpendingChartCard
+                expenses={expenses}
+                categoryNameById={categoryNameById}
+                onOpenCategory={(label) =>
+                  setSelectedCategory({ id: categoryIdByName.get(label) ?? null, name: label })
+                }
+              />
+            </div>
           )}
         </div>
       )}
@@ -348,6 +230,20 @@ export function Dashboard({
           component renders its own heading and skips its own loading/empty
           chrome when there is nothing to show. */}
       {hasData && <Insights familyId={familyId} active={active} />}
+
+      {/* Category drill-down opened from the spending chart's second tap. */}
+      {selectedCategory !== null && (
+        <CategoryDetail
+          familyId={familyId}
+          categoryId={selectedCategory.id}
+          categoryName={selectedCategory.name}
+          expenses={expenses}
+          categories={categories}
+          subCategories={subCategories}
+          subSources={subSources}
+          onClose={() => setSelectedCategory(null)}
+        />
+      )}
     </section>
   );
 }
