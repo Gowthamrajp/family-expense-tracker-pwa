@@ -12,6 +12,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   onSnapshot,
   orderBy,
@@ -30,6 +31,7 @@ import type {
   EmergencyFundAssetInput,
   EmergencyFundAssetType,
   FamilyMember,
+  GoldPurity,
 } from '../domain/types';
 import { firestore } from './firebase';
 
@@ -63,6 +65,12 @@ function readAsset(snapshot: QueryDocumentSnapshot<DocumentData>): EmergencyFund
   };
   if (data.recordedByName !== undefined) {
     asset.recordedByName = data.recordedByName;
+  }
+  if (typeof data.goldGrams === 'number') {
+    asset.goldGrams = data.goldGrams;
+  }
+  if (data.goldPurity !== undefined) {
+    asset.goldPurity = data.goldPurity as GoldPurity;
   }
   if (data.updatedBy !== undefined) {
     asset.updatedBy = data.updatedBy;
@@ -133,6 +141,12 @@ export const emergencyFundRepository: EmergencyFundRepository = {
       recordedByName: resolveMemberLabel(member),
       createdAt: serverTimestamp(),
     };
+    if (input.goldGrams !== undefined) {
+      docData.goldGrams = input.goldGrams;
+    }
+    if (input.goldPurity !== undefined) {
+      docData.goldPurity = input.goldPurity;
+    }
     const ref = await addDoc(emergencyFundCollection(familyId), docData);
     return ref.id;
   },
@@ -151,6 +165,10 @@ export const emergencyFundRepository: EmergencyFundRepository = {
       updatedBy: member.uid,
       updatedAt: serverTimestamp(),
     };
+    // Persist gold weight/purity when present; otherwise clear any stale gold
+    // fields (e.g. when the asset type changed away from gold).
+    docData.goldGrams = input.goldGrams !== undefined ? input.goldGrams : deleteField();
+    docData.goldPurity = input.goldPurity !== undefined ? input.goldPurity : deleteField();
     await updateDoc(doc(emergencyFundCollection(familyId), assetId), docData);
   },
 

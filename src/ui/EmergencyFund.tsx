@@ -12,9 +12,11 @@ import { useMemo, useState } from 'react';
 import {
   EMERGENCY_FUND_ASSET_TYPES,
   EMERGENCY_FUND_ASSET_TYPE_LABELS,
+  GOLD_PURITIES,
   type EmergencyFundAsset,
   type EmergencyFundAssetInput,
   type EmergencyFundAssetType,
+  type GoldPurity,
 } from '../domain/types';
 import {
   MAX_AMOUNT,
@@ -23,7 +25,9 @@ import {
   validateAmount,
   validateDescription,
 } from '../domain/validation';
+import { inrPerGramForPurity, valueGoldHolding } from '../domain/gold';
 import { useEmergencyFund } from '../state/useEmergencyFund';
+import { useGoldRate } from '../state/useGoldRate';
 import { Money, formatINR } from './Money';
 import { Loader } from './Loader';
 
@@ -46,10 +50,13 @@ interface FormState {
   label: string;
   amount: string;
   note: string;
+  /** Gold weight in grams (string for the input). */
+  goldGrams: string;
+  goldPurity: GoldPurity;
 }
 
 function freshForm(): FormState {
-  return { assetType: 'cash', label: '', amount: '', note: '' };
+  return { assetType: 'cash', label: '', amount: '', note: '', goldGrams: '', goldPurity: '22k' };
 }
 
 function formFromAsset(asset: EmergencyFundAsset): FormState {
@@ -58,6 +65,8 @@ function formFromAsset(asset: EmergencyFundAsset): FormState {
     label: asset.label,
     amount: asset.amount.toString(),
     note: asset.note,
+    goldGrams: asset.goldGrams !== undefined ? asset.goldGrams.toString() : '',
+    goldPurity: asset.goldPurity ?? '22k',
   };
 }
 
@@ -65,6 +74,7 @@ interface FieldErrors {
   label?: string;
   amount?: string;
   note?: string;
+  goldGrams?: string;
 }
 
 /** Props for {@link EmergencyFund}. */
@@ -74,8 +84,9 @@ export interface EmergencyFundProps {
 
 /** Render the emergency-fund management section. */
 export function EmergencyFund({ familyId }: EmergencyFundProps): JSX.Element {
-  const { assets, total, status, retry, addAsset, updateAsset, deleteAsset } =
+  const { assets, status, retry, addAsset, updateAsset, deleteAsset } =
     useEmergencyFund(familyId);
+  const { rate: goldRate, status: goldStatus } = useGoldRate();
 
   const [form, setForm] = useState<FormState>(() => freshForm());
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -85,17 +96,48 @@ export function EmergencyFund({ familyId }: EmergencyFundProps): JSX.Element {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
-  // Per-asset-class subtotals for the breakdown chips.
+  // Resolve an asset's CURRENT value: gold holdings (grams + purity) are valued
+  // live from the day's rate when available, falling back to the stored amount;
+  // everything else uses the stored amount.
+  const valueOf = (asset: EmergencyFundAsset): number => {
+    if (
+      asset.assetType === 'gold' &&
+      asset.goldGrams !== undefined &&
+      asset.goldPurity !== undefined &&
+      goldRate !== null
+    ) {
+      return valueGoldHolding(asset.goldGrams, asset.goldPurity, goldRate);
+    }
+    return asset.amount;
+  };
+
+  // Live total prefers computed gold values; falls back to the hook's stored
+  // total when the gold rate is unavailable.
+  const liveTotal = useMemo(
+    () => Math.round(assets.reduce((sum, a) => sum + valueOf(a), 0) * 100) / 100,
+    [assets, goldRate],
+  );
+
+  // Per-asset-class subtotals for the breakdown chips (uses live values).
   const byType = useMemo(() => {
     const map = new Map<EmergencyFundAssetType, number>();
     for (const asset of assets) {
       map.set(
         asset.assetType,
-        Math.round(((map.get(asset.assetType) ?? 0) + asset.amount) * 100) / 100,
+        Math.round(((map.get(asset.assetType) ?? 0) + valueOf(asset)) * 100) / 100,
       );
     }
     return map;
-  }, [assets]);
+  }, [assets, goldRate]);
+
+  // Live value of the gold being entered in the form (for the preview).
+  const formGoldPreview = useMemo(() => {
+    const grams = Number(form.goldGrams);
+    if (form.assetType !== 'gold' || !(grams > 0) || goldRate === null) {
+      return null;
+    }
+    return valueGoldHolding(grams, form.goldPurity, goldRate);
+  }, [form.assetType, form.goldGrams, form.goldPurity, goldRate]);
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -112,14 +154,36 @@ export function EmergencyFund({ familyId }: EmergencyFundProps): JSX.Element {
     if (isSaving) {
       return;
     }
+    const isGold = form.assetType === 'gold';
     const next: FieldErrors = {};
     if (form.label.trim() === '') {
       next.label = 'Enter a name for this asset.';
     }
-    const amountResult = validateAmount(form.amount);
-    if (!amountResult.ok) {
-      next.amount = 'Enter a valid amount.';
+
+    // Gold valued by weight: require grams; the value is computed. Other assets
+    // (or gold entered without grams) require a direct amount.
+    const gramsNum = Number(form.goldGrams);
+    const goldByWeight = isGold && form.goldGrams.trim() !== '';
+    let resolvedAmount = 0;
+
+    if (goldByWeight) {
+      if (!(gramsNum > 0)) {
+        next.goldGrams = 'Enter a weight in grams.';
+      } else if (goldRate !== null) {
+        resolvedAmount = valueGoldHolding(gramsNum, form.goldPurity, goldRate);
+      } else {
+        // No rate yet: keep any previously stored amount (edit) or 0.
+        resolvedAmount = Number(form.amount) || 0;
+      }
+    } else {
+      const amountResult = validateAmount(form.amount);
+      if (!amountResult.ok) {
+        next.amount = 'Enter a valid amount.';
+      } else {
+        resolvedAmount = (amountResult as { ok: true; value: number }).value;
+      }
     }
+
     const noteResult = validateDescription(form.note);
     if (!noteResult.ok) {
       next.note = `Use at most ${MAX_DESCRIPTION_LENGTH} characters.`;
@@ -137,9 +201,13 @@ export function EmergencyFund({ familyId }: EmergencyFundProps): JSX.Element {
       const input: EmergencyFundAssetInput = {
         assetType: form.assetType,
         label: form.label.trim(),
-        amount: (amountResult as { ok: true; value: number }).value,
+        amount: resolvedAmount,
         note: (noteResult as { ok: true; value: string }).value,
       };
+      if (goldByWeight) {
+        input.goldGrams = gramsNum;
+        input.goldPurity = form.goldPurity;
+      }
       if (editingId !== null) {
         await updateAsset(editingId, input);
         setConfirmation('Asset updated.');
@@ -183,10 +251,23 @@ export function EmergencyFund({ familyId }: EmergencyFundProps): JSX.Element {
           Emergency fund total
         </span>
         <Money
-          amount={total}
+          amount={liveTotal}
           testId="emergency-fund-total"
           className="block text-[clamp(28px,6vw,44px)] leading-none font-extrabold tracking-tighter text-emerald-400 neon-glow"
         />
+        {/* Live gold rate line, shown when any gold-by-weight holding exists or
+            the rate is available. */}
+        {goldRate !== null && (
+          <p className="text-xs text-on-surface-variant" data-testid="gold-rate-line">
+            Gold today: {formatINR(inrPerGramForPurity(goldRate, '24k'))}/g (24k) ·{' '}
+            {formatINR(inrPerGramForPurity(goldRate, '22k'))}/g (22k)
+          </p>
+        )}
+        {goldStatus === 'error' && (
+          <p className="text-xs text-on-surface-variant/70">
+            Live gold rate unavailable — gold shown at last saved value.
+          </p>
+        )}
         {assets.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-1">
             {EMERGENCY_FUND_ASSET_TYPES.filter((t) => byType.has(t)).map((t) => (
@@ -239,23 +320,74 @@ export function EmergencyFund({ familyId }: EmergencyFundProps): JSX.Element {
             />
             {errors.label && <span role="alert" className="text-error text-xs">{errors.label}</span>}
           </label>
-          <label className={FIELD_CLASS}>
-            Current value
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min={MIN_AMOUNT}
-              max={MAX_AMOUNT}
-              value={form.amount}
-              onChange={(e) => setField('amount', e.target.value)}
-              disabled={isSaving}
-              aria-invalid={errors.amount !== undefined}
-              data-testid="emergency-fund-amount"
-              className={CONTROL_CLASS}
-            />
-            {errors.amount && <span role="alert" className="text-error text-xs">{errors.amount}</span>}
-          </label>
+          {form.assetType === 'gold' ? (
+            <>
+              <label className={FIELD_CLASS}>
+                Weight (grams)
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  value={form.goldGrams}
+                  onChange={(e) => setField('goldGrams', e.target.value)}
+                  disabled={isSaving}
+                  aria-invalid={errors.goldGrams !== undefined}
+                  data-testid="emergency-fund-gold-grams"
+                  className={CONTROL_CLASS}
+                  placeholder="e.g. 24"
+                />
+                {errors.goldGrams && <span role="alert" className="text-error text-xs">{errors.goldGrams}</span>}
+              </label>
+              <label className={FIELD_CLASS}>
+                Purity
+                <select
+                  value={form.goldPurity}
+                  onChange={(e) => setField('goldPurity', e.target.value as GoldPurity)}
+                  disabled={isSaving}
+                  data-testid="emergency-fund-gold-purity"
+                  className={CONTROL_CLASS}
+                >
+                  {GOLD_PURITIES.map((p) => (
+                    <option key={p} value={p}>{p.toUpperCase()}</option>
+                  ))}
+                </select>
+              </label>
+              <div className={`${FIELD_CLASS} sm:col-span-2`}>
+                <span>Current value (live)</span>
+                <div className="ghost-input px-3 py-2.5 text-body-md flex items-center justify-between">
+                  <span data-testid="emergency-fund-gold-preview" className="font-mono-data text-emerald-400">
+                    {formGoldPreview !== null
+                      ? formatINR(formGoldPreview)
+                      : goldRate === null
+                        ? 'Fetching gold rate…'
+                        : '—'}
+                  </span>
+                  <span className="text-xs text-on-surface-variant">
+                    auto from {form.goldPurity.toUpperCase()} rate
+                  </span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <label className={FIELD_CLASS}>
+              Current value
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min={MIN_AMOUNT}
+                max={MAX_AMOUNT}
+                value={form.amount}
+                onChange={(e) => setField('amount', e.target.value)}
+                disabled={isSaving}
+                aria-invalid={errors.amount !== undefined}
+                data-testid="emergency-fund-amount"
+                className={CONTROL_CLASS}
+              />
+              {errors.amount && <span role="alert" className="text-error text-xs">{errors.amount}</span>}
+            </label>
+          )}
           <label className={FIELD_CLASS}>
             Note (optional)
             <input
@@ -335,6 +467,14 @@ export function EmergencyFund({ familyId }: EmergencyFundProps): JSX.Element {
                   <p className="font-medium text-on-surface truncate">{asset.label}</p>
                   <p className="text-xs text-on-surface-variant flex items-center gap-1.5 flex-wrap">
                     <span>{EMERGENCY_FUND_ASSET_TYPE_LABELS[asset.assetType]}</span>
+                    {asset.assetType === 'gold' && asset.goldGrams !== undefined && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span data-testid="emergency-fund-gold-detail">
+                          {asset.goldGrams}g {(asset.goldPurity ?? '22k').toUpperCase()}
+                        </span>
+                      </>
+                    )}
                     {asset.note.trim() !== '' && (
                       <>
                         <span aria-hidden="true">·</span>
@@ -344,7 +484,7 @@ export function EmergencyFund({ familyId }: EmergencyFundProps): JSX.Element {
                   </p>
                 </div>
                 <Money
-                  amount={asset.amount}
+                  amount={valueOf(asset)}
                   className="font-mono-data text-base font-semibold text-emerald-400 shrink-0"
                 />
                 {isConfirming ? (

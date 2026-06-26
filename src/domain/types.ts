@@ -448,6 +448,19 @@ export const EMERGENCY_FUND_ASSET_TYPE_LABELS: Record<EmergencyFundAssetType, st
   other: 'Other',
 };
 
+/** Gold purity (karat) a holding is measured in. */
+export type GoldPurity = '24k' | '22k' | '18k';
+
+/** All valid {@link GoldPurity} values, for selects. */
+export const GOLD_PURITIES: readonly GoldPurity[] = ['24k', '22k', '18k'] as const;
+
+/** Fineness (fraction of pure gold) for each purity, used to value a holding. */
+export const GOLD_PURITY_FINENESS: Record<GoldPurity, number> = {
+  '24k': 1,
+  '22k': 22 / 24,
+  '18k': 18 / 24,
+};
+
 /**
  * Validated emergency-fund asset input ready to persist. The emergency fund is
  * a family-scoped store of liquid/near-liquid assets set aside for emergencies.
@@ -462,6 +475,15 @@ export interface EmergencyFundAssetInput {
   amount: number;
   /** Optional note (e.g. maturity date, account). */
   note: string;
+  /**
+   * For `gold` assets: weight in grams. When present (with {@link goldPurity}),
+   * the asset's current value is computed live from the day's gold rate rather
+   * than the static {@link amount}; `amount` then holds the last computed
+   * snapshot so totals still work when the rate is unavailable.
+   */
+  goldGrams?: number;
+  /** For `gold` assets: purity used to convert weight to value. */
+  goldPurity?: GoldPurity;
 }
 
 /**
@@ -483,6 +505,8 @@ export interface EmergencyFundAssetDocument {
   label: string;
   amount: number;
   note: string;
+  goldGrams?: number;
+  goldPurity?: string;
   recordedBy: string;
   recordedByName?: string;
   createdAt: FirestoreTimestamp;
