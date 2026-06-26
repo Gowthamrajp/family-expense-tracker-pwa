@@ -187,3 +187,77 @@ export function categoryComparison(
   rows.sort((a, b) => b.current - a.current);
   return rows;
 }
+
+/** Granularity for a spending time series. */
+export type SeriesGranularity = 'month' | 'year';
+
+/** One point in a spending time series: a period key and its total. */
+export interface SeriesPoint {
+  /** Period key — "YYYY-MM" for month granularity, "YYYY" for year. */
+  key: string;
+  total: number;
+}
+
+/** The period key for a date at the given granularity. */
+function periodKey(date: Date, granularity: SeriesGranularity): string {
+  return granularity === 'year' ? yearKey(date) : monthKey(date);
+}
+
+/**
+ * Step a "YYYY-MM" or "YYYY" period key back by `n` periods, returning the key
+ * for that earlier period. Used to build a contiguous, gap-free axis ending at
+ * the current period.
+ */
+function shiftPeriodKey(
+  key: string,
+  granularity: SeriesGranularity,
+  back: number,
+): string {
+  if (granularity === 'year') {
+    return (parseInt(key, 10) - back).toString().padStart(4, '0');
+  }
+  const [y, m] = key.split('-').map((s) => parseInt(s, 10));
+  const d = new Date(y, m - 1 - back, 1);
+  return monthKey(d);
+}
+
+/**
+ * Build a contiguous spending time series ending at the period containing
+ * `today` and spanning `periods` buckets (inclusive), optionally filtered by a
+ * predicate (e.g. a single category or sub-category).
+ *
+ * Periods with no spend are included as zero so the line is continuous and the
+ * x-axis is evenly spaced. Returned oldest-first.
+ *
+ * @param expenses all expenses to draw from
+ * @param today reference date (the series ends at its period)
+ * @param granularity month or year buckets
+ * @param periods how many buckets to include (e.g. 6 months, 5 years)
+ * @param predicate optional filter to scope the series (defaults to all)
+ */
+export function spendingSeries(
+  expenses: Expense[],
+  today: Date,
+  granularity: SeriesGranularity,
+  periods: number,
+  predicate: (expense: Expense) => boolean = () => true,
+): SeriesPoint[] {
+  // Sum matching expenses into their period bucket.
+  const centsByKey = new Map<string, number>();
+  for (const expense of expenses) {
+    if (!predicate(expense)) {
+      continue;
+    }
+    const key = periodKey(expense.date, granularity);
+    centsByKey.set(key, (centsByKey.get(key) ?? 0) + toCents(expense.amount));
+  }
+
+  // Build the contiguous axis ending at the current period, oldest-first.
+  const endKey = periodKey(today, granularity);
+  const points: SeriesPoint[] = [];
+  for (let i = periods - 1; i >= 0; i -= 1) {
+    const key = shiftPeriodKey(endKey, granularity, i);
+    points.push({ key, total: fromCents(centsByKey.get(key) ?? 0) });
+  }
+  return points;
+}

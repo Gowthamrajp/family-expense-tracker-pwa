@@ -1,93 +1,33 @@
 /**
- * Financial Insights screen.
+ * Financial Insights section (rendered inline within the Dashboard).
  *
- * Presents month-over-month spending analytics for the family, derived live
- * from the expense list via {@link useExpenses} and the pure helpers in
- * {@link ../domain/insights}:
+ * Shows, live from the family's expenses:
+ * - the monthly budget progress card;
+ * - a spending-trend line chart (month-on-month or year-on-year, optionally
+ *   scoped to a category or sub-category).
  *
- * - a hero total for the current calendar month with its percent change vs the
- *   previous month;
- * - a category-distribution donut with a percentage legend;
- * - a this-month-vs-last-month per-category comparison with deltas.
- *
- * Category ids are resolved to family Category names via {@link useCategories}.
- * Amounts honor privacy mode through {@link Money}. Loading/empty/error states
- * mirror the dashboard.
+ * The per-category drill-down (sub-category split + transactions) opens from
+ * the dashboard's spending chart; this section also offers a tap target for it.
+ * Category ids are resolved to names via {@link useCategories}. Amounts honor
+ * privacy mode through {@link Money}.
  */
-import { useState } from 'react';
-
 import {
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-} from 'recharts';
-
+  computeBudgetStatus,
+  effectiveMonthlyLimit,
+} from '../domain/budget';
 import {
-  categoryComparison,
-  categoryShares,
-  computeDelta,
   currentMonthKey,
-  currentYearKey,
   previousMonthKey,
-  previousYearKey,
   totalForMonth,
-  totalForYear,
 } from '../domain/insights';
-import { computeBudgetStatus, effectiveMonthlyLimit } from '../domain/budget';
 import { useAuth } from '../state/AuthProvider';
 import { useBudget } from '../state/useBudget';
 import { useCategories } from '../state/useCategories';
 import { useExpenses } from '../state/useExpenses';
 import { useSubCategories } from '../state/useSubCategories';
-import { useSubSources } from '../state/useSubSources';
-import { Money, formatINR } from './Money';
 import { Loader } from './Loader';
-import { CategoryDetail } from './CategoryDetail';
 import { BudgetProgressCard } from './BudgetProgressCard';
-
-/** Neon-cyan accent and a small palette for the donut slices. */
-const SLICE_COLORS = [
-  '#00f5ff',
-  '#63f7ff',
-  '#00b8c4',
-  '#7de3ea',
-  '#3a99a0',
-  '#b9caca',
-  '#849495',
-];
-
-const TOOLTIP_CONTENT_STYLE: React.CSSProperties = {
-  background: '#1f2021',
-  border: '1px solid rgba(0, 245, 255, 0.3)',
-  borderRadius: 12,
-  color: '#e4e2e3',
-};
-
-/** Render a signed percent badge (green up / red down / muted when no baseline). */
-function DeltaBadge({ percent }: { percent: number | null }): JSX.Element {
-  if (percent === null) {
-    return <span className="text-xs text-on-surface-variant">new</span>;
-  }
-  const up = percent > 0;
-  const flat = Math.abs(percent) < 0.05;
-  const color = flat
-    ? 'text-on-surface-variant'
-    : up
-      ? 'text-error'
-      : 'text-primary-container';
-  const icon = flat ? 'trending_flat' : up ? 'trending_up' : 'trending_down';
-  return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium ${color}`}>
-      <span className="material-symbols-outlined text-sm" aria-hidden="true">
-        {icon}
-      </span>
-      {up ? '+' : ''}
-      {percent.toFixed(1)}%
-    </span>
-  );
-}
+import { SpendingTrendCard } from './SpendingTrendCard';
 
 /** Props for {@link Insights}. */
 export interface InsightsProps {
@@ -95,9 +35,7 @@ export interface InsightsProps {
   active?: boolean;
 }
 
-/**
- * Render the Financial Insights screen.
- */
+/** Render the inline insights section (budget progress + spending trend). */
 export function Insights({
   familyId = null,
   active = true,
@@ -106,46 +44,13 @@ export function Insights({
   const { expenses, status, retry } = useExpenses(familyId, active);
   const { categories } = useCategories(familyId);
   const { subCategories } = useSubCategories(familyId);
-  const { subSources } = useSubSources(familyId);
   const { budget } = useBudget(familyId, member);
 
-  // Drill-down target: the category the member tapped, or null when closed.
-  const [selectedCategory, setSelectedCategory] = useState<
-    { id: string | null; name: string } | null
-  >(null);
-
-  // Whether the hero comparison is month-over-month or year-over-year.
-  const [comparePeriod, setComparePeriod] = useState<'month' | 'year'>('month');
-
   const today = new Date();
-  const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
-  const categoryIdByName = new Map(categories.map((c) => [c.name, c.id]));
-  const categoryLabel = (id: string): string => categoryNameById.get(id) ?? 'Unknown';
-
-  // Resolve a distribution/comparison label back to its category id so the
-  // drill-down can scope by id (null for the "Uncategorized" bucket).
-  const openCategory = (label: string): void => {
-    setSelectedCategory({ id: categoryIdByName.get(label) ?? null, name: label });
-  };
-
   const curKey = currentMonthKey(today);
   const prevKey = previousMonthKey(today);
   const currentTotal = totalForMonth(expenses, curKey);
   const previousTotal = totalForMonth(expenses, prevKey);
-
-  // Year-over-year figures for the alternate comparison mode.
-  const curYearKey = currentYearKey(today);
-  const prevYearKey = previousYearKey(today);
-  const currentYearTotal = totalForYear(expenses, curYearKey);
-  const previousYearTotal = totalForYear(expenses, prevYearKey);
-
-  // The hero adapts to the selected comparison period.
-  const isYear = comparePeriod === 'year';
-  const heroCurrent = isYear ? currentYearTotal : currentTotal;
-  const heroPrevious = isYear ? previousYearTotal : previousTotal;
-  const heroKey = isYear ? curYearKey : curKey;
-  const heroPrevKey = isYear ? prevYearKey : prevKey;
-  const delta = computeDelta(heroCurrent, heroPrevious);
 
   // Monthly budget: derive the effective limit from the previous month's spend
   // (percent mode) or the fixed amount, then current-month progress.
@@ -153,46 +58,15 @@ export function Insights({
     budget === null ? null : effectiveMonthlyLimit(budget, previousTotal);
   const budgetProgress = computeBudgetStatus(currentTotal, budgetLimit);
 
-  // Group by categoryId (resolved to a name) so renames/legacy strings never
-  // fragment a category; expenses without a category collapse to "Uncategorized".
-  const shares = categoryShares(
-    expenses,
-    (e) => e.categoryId,
-    categoryLabel,
-    'Uncategorized',
-  );
-  const comparison = categoryComparison(
-    expenses,
-    today,
-    (e) => e.categoryId,
-    categoryLabel,
-    'Uncategorized',
-  );
-
-  // Sub-category insight has moved into the per-category drill-down
-  // (CategoryDetail), where it is meaningful — clubbing every category's
-  // sub-categories together is not.
-
   const hasExpenses = expenses.length > 0;
-
-  const donutData = shares.map((s) => ({ name: s.key, value: s.total }));
 
   return (
     <section
       data-screen="insights"
       aria-label="Financial insights"
-      className="p-5 md:px-container_padding md:py-8 flex flex-col gap-grid_gap"
+      className="flex flex-col gap-4 md:gap-grid_gap"
     >
-      <div>
-        <p className="text-label-caps uppercase tracking-widest text-primary-container mb-1">
-          Analytics &amp; Insights
-        </p>
-        <h1 className="text-headline-lg font-bold text-on-surface">Spending insights</h1>
-      </div>
-
-      {status === 'loading' && (
-        <Loader label="Loading insights…" block />
-      )}
+      {status === 'loading' && <Loader label="Loading insights…" block />}
 
       {status === 'error' && (
         <div role="alert" className="glass-card border-error/30 p-5 flex flex-wrap items-center gap-4">
@@ -203,19 +77,8 @@ export function Insights({
         </div>
       )}
 
-      {status === 'ready' && !hasExpenses && (
-        <div className="glass-card p-card_padding flex flex-col items-center gap-3 text-center">
-          <span className="material-symbols-outlined text-primary-container text-4xl" aria-hidden="true">
-            leaderboard
-          </span>
-          <p className="text-on-surface-variant text-body-lg">
-            No expenses yet — insights will appear once you record some spending.
-          </p>
-        </div>
-      )}
-
       {hasExpenses && (
-        <div className="grid grid-cols-12 gap-grid_gap">
+        <div className="grid grid-cols-12 gap-4 md:gap-grid_gap">
           {/* Monthly budget progress (Req: budget reflected in insights). */}
           <BudgetProgressCard
             budget={budget}
@@ -225,197 +88,25 @@ export function Insights({
             monthKey={curKey}
           />
 
-          {/* Hero: current-period total + MoM/YoY delta with a period toggle. */}
-          <div className="col-span-12 lg:col-span-7 glass-card glass-card-hover p-card_padding relative overflow-hidden">
-            <div className="flex items-center justify-between gap-3 mb-2 relative z-10">
-              <h2 className="text-label-caps uppercase text-on-surface-variant">
-                {isYear ? 'This year' : 'This month'} ({heroKey})
-              </h2>
-              {/* Comparison period toggle (mirrors the Stitch pill control). */}
-              <div className="flex bg-surface-container-low rounded-full p-1 border border-outline-variant/20 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setComparePeriod('month')}
-                  data-testid="insights-compare-month"
-                  aria-pressed={!isYear}
-                  className={`px-3 py-1 rounded-full text-[11px] font-label-caps uppercase tracking-wider transition-all ${
-                    !isYear
-                      ? 'bg-primary-container text-on-primary font-bold'
-                      : 'text-on-surface-variant hover:text-on-surface'
-                  }`}
-                >
-                  Month
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setComparePeriod('year')}
-                  data-testid="insights-compare-year"
-                  aria-pressed={isYear}
-                  className={`px-3 py-1 rounded-full text-[11px] font-label-caps uppercase tracking-wider transition-all ${
-                    isYear
-                      ? 'bg-primary-container text-on-primary font-bold'
-                      : 'text-on-surface-variant hover:text-on-surface'
-                  }`}
-                >
-                  Year
-                </button>
-              </div>
-            </div>
-            <Money
-              amount={heroCurrent}
-              testId="insights-current-total"
-              className="block text-[clamp(36px,7vw,56px)] leading-none font-extrabold tracking-tighter text-white neon-glow"
+          {/* Spending trend over time (month-on-month / year-on-year), scoped
+              to all spending, a category, or a sub-category. */}
+          <div className="col-span-12">
+            <SpendingTrendCard
+              expenses={expenses}
+              categories={categories}
+              subCategories={subCategories}
             />
-            <div className="mt-3 flex items-center gap-2">
-              <DeltaBadge percent={delta.percent} />
-              <span className="text-sm text-on-surface-variant">
-                vs {isYear ? 'last year' : 'last month'} ({heroPrevKey} ·{' '}
-                {formatINR(heroPrevious)})
-              </span>
-            </div>
-            <span className="material-symbols-outlined absolute right-6 top-6 text-primary-container/30 text-5xl pointer-events-none" aria-hidden="true">
-              trending_up
-            </span>
           </div>
 
-          {/* Category distribution donut. */}
-          <div className="col-span-12 lg:col-span-5 glass-card glass-card-hover p-card_padding">
-            <h2 className="text-headline-md font-semibold text-on-surface mb-4">
-              Category distribution
-            </h2>
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="w-40 h-40 shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={donutData}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={48}
-                      outerRadius={72}
-                      paddingAngle={2}
-                      stroke="none"
-                    >
-                      {donutData.map((entry, index) => (
-                        <Cell key={entry.name} fill={SLICE_COLORS[index % SLICE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={TOOLTIP_CONTENT_STYLE}
-                      formatter={(value) =>
-                        formatINR(typeof value === 'number' ? value : Number(value))
-                      }
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <ul className="flex-1 min-w-[10rem] space-y-2">
-                {shares.slice(0, 6).map((share, index) => (
-                  <li key={share.key}>
-                    <button
-                      type="button"
-                      onClick={() => openCategory(share.key)}
-                      data-testid="insights-category-link"
-                      className="w-full flex items-center justify-between gap-2 text-sm rounded-md px-1.5 py-1 hover:bg-surface-container-highest/60 cursor-pointer"
-                    >
-                      <span className="flex items-center gap-2 min-w-0">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full shrink-0"
-                          style={{ background: SLICE_COLORS[index % SLICE_COLORS.length] }}
-                        />
-                        <span className="text-on-surface-variant truncate">{share.key}</span>
-                      </span>
-                      <span className="font-mono-data text-on-surface">
-                        {(share.fraction * 100).toFixed(0)}%
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* This month vs last month per category. */}
-          <div className="col-span-12 glass-card glass-card-hover p-card_padding">
-            <h2 className="text-headline-md font-semibold text-on-surface mb-6">
-              This month vs last month
-            </h2>
-            {comparison.length === 0 ? (
-              <p className="text-on-surface-variant">No category activity in these months.</p>
-            ) : (
-              <ul className="flex flex-col gap-5">
-                {comparison.map((row) => {
-                  const max = Math.max(row.current, row.previous, 1);
-                  const curPct = (row.current / max) * 100;
-                  const prevPct = (row.previous / max) * 100;
-                  return (
-                    <li key={row.key} className="flex flex-col gap-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <button
-                          type="button"
-                          onClick={() => openCategory(row.key)}
-                          data-testid="insights-category-link"
-                          className="text-on-surface text-sm inline-flex items-center gap-1 hover:text-primary-container cursor-pointer min-w-0"
-                        >
-                          <span className="truncate">{row.key}</span>
-                          <span className="material-symbols-outlined text-sm text-on-surface-variant shrink-0" aria-hidden="true">
-                            chevron_right
-                          </span>
-                        </button>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <Money amount={row.current} className="font-mono-data text-sm text-on-surface" />
-                          <DeltaBadge percent={row.percent} />
-                        </div>
-                      </div>
-                      <div className="relative h-3 w-full rounded-full bg-surface-container-highest overflow-hidden">
-                        {/* Previous-month marker (outline) under the current bar. */}
-                        <div
-                          className="absolute top-0 left-0 h-full border-r-2 border-primary-container/30"
-                          style={{ width: `${prevPct}%` }}
-                          aria-hidden="true"
-                        />
-                        <div
-                          className="h-full bg-primary-container neon-border rounded-full"
-                          style={{ width: `${curPct}%` }}
-                        />
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            <div className="mt-6 flex items-center gap-4 text-xs text-on-surface-variant">
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-primary-container" /> Current
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full border border-primary-container/40" /> Previous
-              </span>
-            </div>
-          </div>
-
-          {/* Hint: sub-category insight lives inside each category's drill-down. */}
+          {/* Hint: tap the spending chart above (Category mode) to drill into a
+              category's sub-category split and transactions. */}
           <div className="col-span-12 flex items-center gap-2 text-sm text-on-surface-variant px-1">
             <span className="material-symbols-outlined text-base text-primary-container" aria-hidden="true">
               touch_app
             </span>
-            <span>Tap a category to see its sub-category split and transactions.</span>
+            <span>Tap a category in the spending chart to see its sub-category split and transactions.</span>
           </div>
         </div>
-      )}
-
-      {/* Per-category drill-down overlay (category → sub-category insights). */}
-      {selectedCategory !== null && (
-        <CategoryDetail
-          familyId={familyId}
-          categoryId={selectedCategory.id}
-          categoryName={selectedCategory.name}
-          expenses={expenses}
-          categories={categories}
-          subCategories={subCategories}
-          subSources={subSources}
-          onClose={() => setSelectedCategory(null)}
-        />
       )}
     </section>
   );

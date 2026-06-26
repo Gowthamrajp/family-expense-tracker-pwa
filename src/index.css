@@ -126,6 +126,28 @@
     opacity: 0.6;
     cursor: not-allowed;
   }
+
+  /*
+   * Native date inputs on iOS/Safari have an intrinsic content width and can
+   * overflow their flex/grid container (the calendar/spinner box pushes wider
+   * than 100%). Force them to honor the container box so they never overflow.
+   */
+  input[type='date'] {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  /* Keep the iOS calendar indicator tappable and tinted for the dark theme. */
+  input[type='date']::-webkit-date-and-time-value {
+    text-align: left;
+  }
+  input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.6;
+  }
 }
 
 /* Thin cyan-tinted scrollbar for scroll regions. */

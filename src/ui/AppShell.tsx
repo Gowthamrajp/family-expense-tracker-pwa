@@ -23,7 +23,7 @@
  * It renders either an explicit `children` payload or, when used as a layout
  * route, the matched child route via {@link Outlet}.
  */
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, type To } from 'react-router-dom';
 
 import { useAuth } from '../state/AuthProvider';
@@ -111,6 +111,33 @@ export function AppShell({ children, isOffline }: AppShellProps): JSX.Element {
     void signOut();
   }, [signOut]);
 
+  // Account dropdown (avatar-triggered): collapses the member name + sign-out
+  // into a popover so the header bar stays compact.
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!accountOpen) {
+      return;
+    }
+    const onPointerDown = (event: MouseEvent): void => {
+      if (accountRef.current && !accountRef.current.contains(event.target as Node)) {
+        setAccountOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        setAccountOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [accountOpen]);
+
   return (
     <div data-component="app-shell" className="min-h-screen bg-surface-container-lowest">
       {/* Fixed desktop sidebar (hidden on narrow viewports). */}
@@ -152,56 +179,97 @@ export function AppShell({ children, isOffline }: AppShellProps): JSX.Element {
 
       {/* Main canvas: offset by the sidebar width on desktop. */}
       <div className="md:ml-64 flex flex-col min-h-screen">
-        {/* Top app bar. */}
-        <header className="sticky top-0 z-40 flex items-center justify-between gap-4 flex-wrap px-5 md:px-container_padding h-auto md:h-20 py-3 md:py-0 bg-background/80 backdrop-blur-2xl border-b border-outline-variant/20">
+        {/* Top app bar — compact, fixed-height, never wraps. */}
+        <header className="sticky top-0 z-40 flex items-center gap-2 px-4 md:px-container_padding h-14 md:h-16 bg-background/80 backdrop-blur-2xl border-b border-outline-variant/20">
           {/* Compact wordmark on mobile (sidebar is hidden there). */}
-          <span className="md:hidden text-xl font-extrabold tracking-tighter text-primary-container neon-glow">
+          <span className="md:hidden text-lg font-extrabold tracking-tighter text-primary-container neon-glow">
             FamilyVault
           </span>
 
-          <div className="flex items-center gap-3 md:gap-4 ml-auto">
-            {/* Privacy mode: blur monetary amounts on screen (presentation-only). */}
+          <div className="flex items-center gap-1.5 md:gap-2 ml-auto">
+            {/* Privacy mode: icon-only toggle to blur on-screen amounts. */}
             <button
               type="button"
               onClick={togglePrivacy}
               aria-pressed={isPrivate}
               data-testid="privacy-toggle"
               title={isPrivate ? 'Show amounts' : 'Hide amounts'}
-              className="btn-ghost px-3 py-2 text-sm flex items-center gap-1.5"
+              aria-label={isPrivate ? 'Show amounts' : 'Hide amounts'}
+              className="btn-ghost p-2 flex items-center justify-center"
             >
-              <span className="material-symbols-outlined text-base" aria-hidden="true">
+              <span className="material-symbols-outlined text-xl" aria-hidden="true">
                 {isPrivate ? 'visibility_off' : 'visibility'}
               </span>
-              <span className="hidden sm:inline">{isPrivate ? 'Private' : 'Privacy'}</span>
             </button>
             {/* Install affordance, shown only when the app is installable (Req 5.4). */}
             <InstallPrompt />
             {/* Cross-platform manual install steps (covers iOS Safari etc., Req 5.4). */}
             <InstallInstructions />
-            {/* Resolved member identity: avatar + label (Req 1.5). */}
-            <div className="flex items-center gap-2 px-2 py-1 rounded-full bg-surface-container-high/40 border border-outline-variant/20">
-              <Avatar
-                photoURL={member?.photoURL ?? null}
-                displayName={member?.displayName ?? null}
-                email={member?.email ?? null}
-                size={28}
-                ring={false}
-              />
-              <span data-testid="member-label" className="text-sm text-on-surface max-w-[12rem] truncate pr-1">
-                {memberLabel ?? 'Signed in'}
-              </span>
+
+            {/* Account: avatar button opens a dropdown with the member identity
+                and sign-out, keeping the bar compact (Req 1.5, 1.6). */}
+            <div className="relative" ref={accountRef}>
+              <button
+                type="button"
+                onClick={() => setAccountOpen((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={accountOpen}
+                aria-label="Account menu"
+                data-testid="account-menu-trigger"
+                className="flex items-center rounded-full ring-1 ring-outline-variant/30 hover:ring-primary-container/50 transition-shadow"
+              >
+                <Avatar
+                  photoURL={member?.photoURL ?? null}
+                  displayName={member?.displayName ?? null}
+                  email={member?.email ?? null}
+                  size={32}
+                  ring={false}
+                />
+              </button>
+
+              {accountOpen && (
+                <div
+                  role="menu"
+                  data-testid="account-menu"
+                  className="absolute right-0 mt-2 w-60 max-w-[calc(100vw-2rem)] glass-card p-2 flex flex-col gap-1 z-50 shadow-xl"
+                >
+                  {/* Identity header. */}
+                  <div className="flex items-center gap-3 p-2">
+                    <Avatar
+                      photoURL={member?.photoURL ?? null}
+                      displayName={member?.displayName ?? null}
+                      email={member?.email ?? null}
+                      size={40}
+                      ring={false}
+                    />
+                    <div className="min-w-0">
+                      <p data-testid="member-label" className="text-sm font-medium text-on-surface truncate">
+                        {member?.displayName ?? memberLabel ?? 'Signed in'}
+                      </p>
+                      {member?.email && (
+                        <p className="text-xs text-on-surface-variant truncate">{member.email}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="h-px bg-outline-variant/20 my-1" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAccountOpen(false);
+                      handleSignOut();
+                    }}
+                    data-testid="signout-button"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-on-surface hover:bg-error/10 hover:text-error transition-colors text-left"
+                  >
+                    <span className="material-symbols-outlined text-lg" aria-hidden="true">
+                      logout
+                    </span>
+                    Sign out
+                  </button>
+                </div>
+              )}
             </div>
-            {/* Sign-out control ends the Session (Req 1.6). */}
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="btn-ghost px-4 py-2 text-sm flex items-center gap-1.5"
-            >
-              <span className="material-symbols-outlined text-base" aria-hidden="true">
-                logout
-              </span>
-              <span className="hidden sm:inline">Sign out</span>
-            </button>
           </div>
         </header>
 

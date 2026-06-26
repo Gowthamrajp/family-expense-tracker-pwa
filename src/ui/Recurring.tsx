@@ -490,84 +490,92 @@ export function Recurring({ familyId = null, embedded = false }: RecurringProps 
                 <li
                   key={rule.id}
                   data-testid="recurring-row"
-                  className="glass-card glass-card-hover p-4 flex items-center gap-4"
+                  className="glass-card glass-card-hover p-3 md:p-4 flex items-start gap-3"
                 >
                   <div
-                    className={`shrink-0 w-11 h-11 rounded-lg flex items-center justify-center ${
+                    className={`shrink-0 w-9 h-9 md:w-11 md:h-11 rounded-lg flex items-center justify-center ${
                       isIncome
                         ? 'bg-emerald-400/10 text-emerald-400'
                         : 'bg-primary-container/10 text-primary-container'
                     }`}
                   >
-                    <span className="material-symbols-outlined" aria-hidden="true">
+                    <span className="material-symbols-outlined text-[20px] md:text-2xl" aria-hidden="true">
                       {isIncome ? 'arrow_downward' : 'autorenew'}
                     </span>
                   </div>
+
+                  {/* Title + badges + meta. */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-on-surface">
-                        {title}
-                        {!isIncome && subCategoryName !== undefined && (
-                          <span className="text-on-surface-variant font-normal"> · {subCategoryName}</span>
-                        )}
-                      </span>
+                    <p className="font-semibold text-on-surface text-sm md:text-base truncate">
+                      {title}
+                      {!isIncome && subCategoryName !== undefined && (
+                        <span className="text-on-surface-variant font-normal"> · {subCategoryName}</span>
+                      )}
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
                       {isIncome && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-400/10 text-emerald-400 uppercase tracking-wide">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-400/10 text-emerald-400 uppercase tracking-wide">
                           Income
                         </span>
                       )}
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-surface-container-high/60 text-on-surface-variant uppercase tracking-wide">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-surface-container-high/60 text-on-surface-variant uppercase tracking-wide">
                         {frequencyLabel(rule.frequency)}
                       </span>
                       {!rule.active && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-tertiary-container/20 text-tertiary-container uppercase tracking-wide">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-tertiary-container/20 text-tertiary-container uppercase tracking-wide">
                           Paused
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-on-surface-variant mt-0.5 flex items-center gap-2 flex-wrap">
+                    <p className="text-[11px] md:text-xs text-on-surface-variant mt-1 flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[13px] shrink-0" aria-hidden="true">
+                        event
+                      </span>
+                      <span className="shrink-0">Since {dateFormatter.format(rule.startDate)}</span>
                       {!isIncome && (
                         <>
-                          <span>{rule.source}</span>
-                          <span aria-hidden="true">•</span>
+                          <span aria-hidden="true" className="shrink-0">·</span>
+                          <span className="truncate">{rule.source}</span>
                         </>
                       )}
-                      <span>Since {dateFormatter.format(rule.startDate)}</span>
-                      {rule.description && (
-                        <>
-                          <span aria-hidden="true">•</span>
-                          <span className="truncate">{rule.description}</span>
-                        </>
-                      )}
-                    </div>
+                    </p>
+                    {rule.description && (
+                      <p className="text-[11px] md:text-xs text-on-surface-variant/80 truncate">
+                        {rule.description}
+                      </p>
+                    )}
                   </div>
-                  <Money
-                    amount={rule.amount}
-                    className={`font-mono-data text-lg font-semibold shrink-0 ${
-                      isIncome ? 'text-emerald-400' : 'text-white'
-                    }`}
-                  />
-                  <div className="shrink-0 flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => void setRuleActive(rule.id, !rule.active)}
-                      aria-label={rule.active ? 'Pause recurring payment' : 'Resume recurring payment'}
-                      className="btn-ghost p-1.5 text-on-surface-variant hover:text-primary-container"
-                    >
-                      <span className="material-symbols-outlined text-lg" aria-hidden="true">
-                        {rule.active ? 'pause' : 'play_arrow'}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPendingDelete(rule)}
-                      disabled={isDeleting}
-                      aria-busy={isDeleting}
-                      aria-label="Delete recurring payment"
-                      className="btn-ghost p-1.5 text-on-surface-variant hover:text-error"
-                    >
-                      <span className="material-symbols-outlined text-lg" aria-hidden="true">delete</span>
-                    </button>
+
+                  {/* Right column: amount on top, actions aligned beneath it. */}
+                  <div className="shrink-0 flex flex-col items-end gap-1">
+                    <Money
+                      amount={rule.amount}
+                      className={`font-mono-data text-base md:text-lg font-semibold leading-none ${
+                        isIncome ? 'text-emerald-400' : 'text-white'
+                      }`}
+                    />
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => void setRuleActive(rule.id, !rule.active)}
+                        aria-label={rule.active ? 'Pause recurring payment' : 'Resume recurring payment'}
+                        className="btn-ghost p-1 text-on-surface-variant hover:text-primary-container"
+                      >
+                        <span className="material-symbols-outlined text-base md:text-lg" aria-hidden="true">
+                          {rule.active ? 'pause' : 'play_arrow'}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDelete(rule)}
+                        disabled={isDeleting}
+                        aria-busy={isDeleting}
+                        aria-label="Delete recurring payment"
+                        className="btn-ghost p-1 text-on-surface-variant hover:text-error"
+                      >
+                        <span className="material-symbols-outlined text-base md:text-lg" aria-hidden="true">delete</span>
+                      </button>
+                    </div>
                   </div>
                 </li>
               );
