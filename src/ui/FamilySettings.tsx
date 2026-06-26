@@ -35,6 +35,7 @@ import { useSubCategories } from '../state/useSubCategories';
 import { useSubSources } from '../state/useSubSources';
 import { Loader } from './Loader';
 import { BudgetManager } from './BudgetManager';
+import { CollapsibleCard } from './CollapsibleCard';
 
 const CATEGORY_REQUIRED_MESSAGE = 'Enter a category name.';
 const CATEGORY_DUPLICATE_MESSAGE = 'That category already exists.';
@@ -189,14 +190,13 @@ function FamilySection({
   };
 
   return (
-    <section
-      className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
-      aria-labelledby="family-heading"
+    <CollapsibleCard
+      title="Your family"
+      icon="group"
+      subtitle="Invite code and members"
+      badge={`${members.length} member${members.length === 1 ? '' : 's'}`}
+      testId="family-section"
     >
-      <h2 id="family-heading" className="text-headline-md font-semibold text-on-surface">
-        Your family
-      </h2>
-
       <div className="flex flex-col gap-3">
         <span className="text-sm text-on-surface-variant">
           Share this invite code so others can join:
@@ -329,7 +329,7 @@ function FamilySection({
           </p>
         )}
       </div>
-    </section>
+    </CollapsibleCard>
   );
 }
 
@@ -381,13 +381,13 @@ export function CategoryManager({ familyId }: CategoryManagerProps): JSX.Element
   };
 
   return (
-    <section
-      className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
-      aria-labelledby="categories-heading"
+    <CollapsibleCard
+      title="Categories &amp; sub-categories"
+      icon="category"
+      subtitle="Organize spending into categories"
+      badge={status === 'ready' ? `${categories.length}` : undefined}
+      testId="category-section"
     >
-      <h2 id="categories-heading" className="text-headline-md font-semibold text-on-surface">
-        Categories &amp; sub-categories
-      </h2>
       <p className="text-sm text-on-surface-variant">
         Rename or remove categories, and add sub-categories under each for finer
         spending insights. A category or sub-category that's still used by an
@@ -460,7 +460,7 @@ export function CategoryManager({ familyId }: CategoryManagerProps): JSX.Element
           {confirmation}
         </p>
       )}
-    </section>
+    </CollapsibleCard>
   );
 }
 
@@ -821,13 +821,13 @@ export function SourceManager({ familyId }: SourceManagerProps): JSX.Element {
   };
 
   return (
-    <section
-      className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
-      aria-labelledby="sources-heading"
+    <CollapsibleCard
+      title="Payment sources"
+      icon="account_balance_wallet"
+      subtitle="Funding methods and their cards/accounts"
+      badge={status === 'ready' ? `${sources.length}` : undefined}
+      testId="source-section"
     >
-      <h2 id="sources-heading" className="text-headline-md font-semibold text-on-surface">
-        Payment sources
-      </h2>
       <p className="text-sm text-on-surface-variant">
         Funding methods used to pay for expenses (e.g. Cash, Credit Card).
         Expand a source to manage its cards/accounts. Renaming a source updates
@@ -888,7 +888,7 @@ export function SourceManager({ familyId }: SourceManagerProps): JSX.Element {
 
       {error && <p role="alert" className="text-error text-sm">{error}</p>}
       {confirmation && <p role="status" className="text-primary-container text-sm">{confirmation}</p>}
-    </section>
+    </CollapsibleCard>
   );
 }
 

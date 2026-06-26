@@ -29,6 +29,7 @@ import { monthKey, currentMonthKey, previousMonthKey } from '../domain/insights'
 import type { BudgetMode } from '../domain/types';
 import { Loader } from './Loader';
 import { BudgetScopeRow, type ScopeBudgetValue } from './BudgetScopeRow';
+import { CollapsibleCard } from './CollapsibleCard';
 
 /** Category-name → Material Symbols icon (kept in sync with ExpenseList). */
 const CATEGORY_ICONS: ReadonlyArray<[RegExp, string]> = [
@@ -121,27 +122,12 @@ export function BudgetManager({ familyId }: BudgetManagerProps): JSX.Element {
   };
 
   return (
-    <section
-      className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
-      aria-labelledby="budget-heading"
-      data-testid="budget-manager"
+    <CollapsibleCard
+      title="Monthly budgets"
+      icon="account_balance_wallet"
+      subtitle="Caps overall, per category, and per sub-category"
+      testId="budget-manager"
     >
-      <div className="flex items-center gap-3">
-        <span className="shrink-0 w-10 h-10 rounded-lg bg-primary-container/10 flex items-center justify-center text-primary-container">
-          <span className="material-symbols-outlined" aria-hidden="true">
-            account_balance_wallet
-          </span>
-        </span>
-        <div>
-          <h2 id="budget-heading" className="text-headline-md font-semibold text-on-surface">
-            Monthly budgets
-          </h2>
-          <p className="text-sm text-on-surface-variant">
-            Set a cap overall, per category, and per sub-category. You'll be
-            alerted as you add transactions and can track them in Insights.
-          </p>
-        </div>
-      </div>
 
       {status === 'loading' ? (
         <Loader label="Loading budgets…" />
@@ -265,6 +251,6 @@ export function BudgetManager({ familyId }: BudgetManagerProps): JSX.Element {
           </div>
         </>
       )}
-    </section>
+    </CollapsibleCard>
   );
 }
