@@ -104,12 +104,12 @@ function ChartSection({
 }: ChartSectionProps): JSX.Element {
   return (
     <section
-      className="glass-card glass-card-hover p-card_padding flex flex-col gap-4"
+      className="glass-card glass-card-hover p-4 md:p-card_padding flex flex-col gap-3 md:gap-4"
       data-testid={testId}
       aria-label={title}
     >
-      <h2 className="text-headline-md font-semibold text-on-surface">{title}</h2>
-      <div className="w-full h-[280px]">
+      <h2 className="text-base md:text-headline-md font-semibold text-on-surface">{title}</h2>
+      <div className="w-full h-[200px] md:h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 8 }}>
             <defs>
@@ -202,9 +202,9 @@ export function Dashboard({
     <section
       data-screen="dashboard"
       aria-label="Spending dashboard"
-      className="p-5 md:px-container_padding md:py-8 flex flex-col gap-grid_gap"
+      className="p-4 md:px-container_padding md:py-8 flex flex-col gap-4 md:gap-grid_gap"
     >
-      <h1 className="text-headline-lg font-bold text-on-surface">Dashboard</h1>
+      <h1 className="text-2xl md:text-headline-lg font-bold text-on-surface">Dashboard</h1>
 
       {/* Loading indicator while the data is being retrieved. */}
       {status === 'loading' && (
@@ -250,49 +250,50 @@ export function Dashboard({
           cash-flow data (income and/or expenses); the spending charts render
           only when there are expenses to chart. */}
       {hasData && (
-        <div className="grid grid-cols-12 gap-grid_gap">
-          {/* Hero row: total spend, total income, and net balance. */}
-          <div className="col-span-12 md:col-span-6 lg:col-span-4 glass-card glass-card-hover p-card_padding relative overflow-hidden">
-            <h2 className="text-label-caps uppercase text-on-surface-variant mb-2">
-              Total Family Spend
+        <div className="grid grid-cols-12 gap-4 md:gap-grid_gap">
+          {/* Hero row: total spend, total income, and net balance. Compact and
+              2-up on mobile, expanding to thirds on large screens. */}
+          <div className="col-span-6 lg:col-span-4 glass-card glass-card-hover p-4 md:p-card_padding relative overflow-hidden">
+            <h2 className="text-label-caps uppercase text-on-surface-variant mb-1 md:mb-2">
+              Total Spend
             </h2>
             <Money
               amount={total}
               testId="dashboard-total"
-              className="text-[clamp(32px,6vw,48px)] leading-none font-extrabold tracking-tighter text-white neon-glow"
+              className="text-[clamp(20px,5vw,48px)] leading-none font-extrabold tracking-tighter text-white neon-glow"
             />
-            <span className="material-symbols-outlined absolute right-6 top-6 text-error/30 text-4xl pointer-events-none" aria-hidden="true">
+            <span className="material-symbols-outlined absolute right-3 top-3 md:right-6 md:top-6 text-error/30 text-2xl md:text-4xl pointer-events-none" aria-hidden="true">
               south_west
             </span>
           </div>
-          <div className="col-span-12 md:col-span-6 lg:col-span-4 glass-card glass-card-hover p-card_padding relative overflow-hidden">
-            <h2 className="text-label-caps uppercase text-on-surface-variant mb-2">
+          <div className="col-span-6 lg:col-span-4 glass-card glass-card-hover p-4 md:p-card_padding relative overflow-hidden">
+            <h2 className="text-label-caps uppercase text-on-surface-variant mb-1 md:mb-2">
               Total Income
             </h2>
             <Money
               amount={totalIncomeAmount}
               testId="dashboard-income-total"
-              className="text-[clamp(32px,6vw,48px)] leading-none font-extrabold tracking-tighter text-primary-container neon-glow"
+              className="text-[clamp(20px,5vw,48px)] leading-none font-extrabold tracking-tighter text-primary-container neon-glow"
             />
-            <span className="material-symbols-outlined absolute right-6 top-6 text-primary-container/30 text-4xl pointer-events-none" aria-hidden="true">
+            <span className="material-symbols-outlined absolute right-3 top-3 md:right-6 md:top-6 text-primary-container/30 text-2xl md:text-4xl pointer-events-none" aria-hidden="true">
               north_east
             </span>
           </div>
-          <div className="col-span-12 lg:col-span-4 glass-card glass-card-hover p-card_padding relative overflow-hidden">
-            <h2 className="text-label-caps uppercase text-on-surface-variant mb-2">
+          <div className="col-span-12 lg:col-span-4 glass-card glass-card-hover p-4 md:p-card_padding relative overflow-hidden">
+            <h2 className="text-label-caps uppercase text-on-surface-variant mb-1 md:mb-2">
               Net Balance
             </h2>
             <Money
               amount={netBalance}
               testId="dashboard-net-balance"
-              className={`text-[clamp(32px,6vw,48px)] leading-none font-extrabold tracking-tighter neon-glow ${
+              className={`text-[clamp(20px,5vw,48px)] leading-none font-extrabold tracking-tighter neon-glow ${
                 netBalance >= 0 ? 'text-primary-container' : 'text-error'
               }`}
             />
-            <p className="text-xs text-on-surface-variant mt-2">
+            <p className="text-xs text-on-surface-variant mt-1 md:mt-2">
               {netBalance >= 0 ? 'Income exceeds spending' : 'Spending exceeds income'}
             </p>
-            <span className="material-symbols-outlined absolute right-6 top-6 text-primary-container/30 text-4xl pointer-events-none" aria-hidden="true">
+            <span className="material-symbols-outlined absolute right-3 top-3 md:right-6 md:top-6 text-primary-container/30 text-2xl md:text-4xl pointer-events-none" aria-hidden="true">
               account_balance
             </span>
           </div>
