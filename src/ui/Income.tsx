@@ -2,84 +2,28 @@
  * Income screen.
  *
  * Lets a family record money coming IN (salary, interest, refunds, etc.) and
- * review it. Mirrors the expense entry/list experience but leaner: each income
- * has an amount, a free-text source label, a date, and an optional note. Wired
- * via {@link useIncome}; amounts honor privacy mode through {@link Money}.
+ * review it. Each income has an amount, a free-text source label, a date, and
+ * an optional note. Wired via {@link useIncome}; amounts honor privacy mode
+ * through {@link Money}.
  *
- * Shows the current month's income total as a hero, an add form, and the list
- * of recorded income with inline edit/delete.
+ * Shows the current month's income total as a hero, an add/edit form (the
+ * shared {@link IncomeEntryForm}), and the list of recorded income with inline
+ * edit/delete.
  */
 import { useMemo, useState } from 'react';
 
-import {
-  DEFAULT_INCOME_SOURCES,
-  type Income as IncomeRecord,
-  type IncomeInput,
-} from '../domain/types';
-import {
-  MAX_AMOUNT,
-  MAX_DESCRIPTION_LENGTH,
-  MIN_AMOUNT,
-  MIN_DATE,
-  validateAmount,
-  validateDate,
-  validateDescription,
-} from '../domain/validation';
+import { type Income as IncomeRecord } from '../domain/types';
 import { currentMonthKey, totalForMonth } from '../domain/insights';
 import { useIncome } from '../state/useIncome';
+import { IncomeEntryForm } from './IncomeEntryForm';
 import { Money } from './Money';
 import { Loader } from './Loader';
-
-const CONTROL_CLASS = 'ghost-input px-3 py-2.5 text-body-md w-full';
-const FIELD_CLASS = 'flex flex-col gap-1.5 text-left text-sm text-on-surface-variant';
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
   year: 'numeric',
   month: 'short',
   day: 'numeric',
 });
-
-/** Format a stored Date as the `yyyy-mm-dd` value a native date input expects. */
-function toDateInputValue(date: Date): string {
-  const y = date.getFullYear().toString().padStart(4, '0');
-  const m = (date.getMonth() + 1).toString().padStart(2, '0');
-  const d = date.getDate().toString().padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-/** Editable form state. */
-interface FormState {
-  amount: string;
-  source: string;
-  date: string;
-  description: string;
-}
-
-function freshForm(): FormState {
-  return {
-    amount: '',
-    source: '',
-    date: toDateInputValue(new Date()),
-    description: '',
-  };
-}
-
-function formFromIncome(income: IncomeRecord): FormState {
-  return {
-    amount: income.amount.toString(),
-    source: income.source,
-    date: toDateInputValue(income.date),
-    description: income.description,
-  };
-}
-
-/** Per-field errors for the income form. */
-interface IncomeErrors {
-  amount?: string;
-  source?: string;
-  date?: string;
-  description?: string;
-}
 
 /** Props for {@link Income}. */
 export interface IncomeProps {
@@ -89,16 +33,11 @@ export interface IncomeProps {
 
 /** Render the income tracking screen. */
 export function Income({ familyId = null, active = true }: IncomeProps = {}): JSX.Element {
-  const { incomes, status, retry, addIncome, updateIncome, deleteIncome } = useIncome(
-    familyId,
-    active,
-  );
+  const { incomes, status, retry, deleteIncome } = useIncome(familyId, active);
 
-  const [form, setForm] = useState<FormState>(() => freshForm());
-  const [errors, setErrors] = useState<IncomeErrors>({});
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  // The income currently being edited (shown in the top form), or null when
+  // adding a new entry.
+  const [editing, setEditing] = useState<IncomeRecord | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
@@ -111,75 +50,8 @@ export function Income({ familyId = null, active = true }: IncomeProps = {}): JS
     [incomes],
   );
 
-  const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
-    setForm((current) => ({ ...current, [key]: value }));
-  };
-
-  const resetForm = () => {
-    setForm(freshForm());
-    setEditingId(null);
-    setErrors({});
-  };
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (isSaving) {
-      return;
-    }
-    const next: IncomeErrors = {};
-
-    const amountResult = validateAmount(form.amount);
-    if (!amountResult.ok) {
-      next.amount = 'Enter a valid amount.';
-    }
-    if (form.source.trim() === '') {
-      next.source = 'Enter an income source.';
-    }
-    const dateResult = validateDate(form.date, new Date());
-    if (!dateResult.ok) {
-      next.date = 'Enter a valid date (not in the future).';
-    }
-    const descriptionResult = validateDescription(form.description);
-    if (!descriptionResult.ok) {
-      next.description = `Use at most ${MAX_DESCRIPTION_LENGTH} characters.`;
-    }
-
-    if (Object.keys(next).length > 0) {
-      setErrors(next);
-      setConfirmation(null);
-      return;
-    }
-
-    setErrors({});
-    setConfirmation(null);
-    setIsSaving(true);
-    try {
-      const input: IncomeInput = {
-        amount: (amountResult as { ok: true; value: number }).value,
-        source: form.source.trim(),
-        date: (dateResult as { ok: true; value: Date }).value,
-        description: (descriptionResult as { ok: true; value: string }).value,
-      };
-      if (editingId !== null) {
-        await updateIncome(editingId, input);
-        setConfirmation('Income updated.');
-      } else {
-        await addIncome(input);
-        setConfirmation('Income added.');
-      }
-      resetForm();
-    } catch {
-      setErrors({ amount: 'Saving failed. Please try again.' });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const startEdit = (income: IncomeRecord) => {
-    setForm(formFromIncome(income));
-    setEditingId(income.id);
-    setErrors({});
-    setConfirmation(null);
+    setEditing(income);
     // Bring the form into view on small screens.
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -188,16 +60,14 @@ export function Income({ familyId = null, active = true }: IncomeProps = {}): JS
     setDeletingId(incomeId);
     try {
       await deleteIncome(incomeId);
-      if (editingId === incomeId) {
-        resetForm();
+      if (editing?.id === incomeId) {
+        setEditing(null);
       }
     } finally {
       setDeletingId(null);
       setConfirmingDeleteId(null);
     }
   };
-
-  const descriptionLength = Array.from(form.description).length;
 
   return (
     <section
@@ -233,119 +103,21 @@ export function Income({ familyId = null, active = true }: IncomeProps = {}): JS
         </span>
       </div>
 
-      {/* Add / edit form. */}
-      <form
-        onSubmit={handleSubmit}
-        noValidate
-        className="glass-card p-card_padding flex flex-col gap-4"
-        aria-labelledby="income-form-heading"
-      >
+      {/* Add / edit form (shared component). */}
+      <section className="glass-card p-card_padding flex flex-col gap-4" aria-labelledby="income-form-heading">
         <h2 id="income-form-heading" className="text-headline-md font-semibold text-on-surface">
-          {editingId !== null ? 'Edit income' : 'Add income'}
+          {editing !== null ? 'Edit income' : 'Add income'}
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <label className={FIELD_CLASS}>
-            Amount
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min={MIN_AMOUNT}
-              max={MAX_AMOUNT}
-              value={form.amount}
-              onChange={(e) => setField('amount', e.target.value)}
-              disabled={isSaving}
-              aria-invalid={errors.amount !== undefined}
-              data-testid="income-amount"
-              className={CONTROL_CLASS}
-            />
-            {errors.amount && <span role="alert" className="text-error text-xs">{errors.amount}</span>}
-          </label>
-          <label className={FIELD_CLASS}>
-            Source
-            <input
-              type="text"
-              list="income-source-suggestions"
-              value={form.source}
-              onChange={(e) => setField('source', e.target.value)}
-              disabled={isSaving}
-              placeholder="Salary, Interest, …"
-              aria-invalid={errors.source !== undefined}
-              data-testid="income-source"
-              className={CONTROL_CLASS}
-              autoComplete="off"
-            />
-            <datalist id="income-source-suggestions">
-              {DEFAULT_INCOME_SOURCES.map((s) => (
-                <option key={s} value={s} />
-              ))}
-            </datalist>
-            {errors.source && <span role="alert" className="text-error text-xs">{errors.source}</span>}
-          </label>
-          <label className={FIELD_CLASS}>
-            Date <span className="text-on-surface-variant/60">(defaults to today)</span>
-            <input
-              type="date"
-              min={MIN_DATE}
-              value={form.date}
-              onChange={(e) => setField('date', e.target.value)}
-              disabled={isSaving}
-              aria-invalid={errors.date !== undefined}
-              data-testid="income-date"
-              className={`${CONTROL_CLASS} [color-scheme:dark]`}
-            />
-            {errors.date && <span role="alert" className="text-error text-xs">{errors.date}</span>}
-          </label>
-          <label className={FIELD_CLASS}>
-            Note (optional)
-            <input
-              type="text"
-              value={form.description}
-              onChange={(e) => setField('description', e.target.value)}
-              disabled={isSaving}
-              maxLength={MAX_DESCRIPTION_LENGTH}
-              data-testid="income-note"
-              className={CONTROL_CLASS}
-              autoComplete="off"
-            />
-            <span className="text-xs text-on-surface-variant self-end">
-              {descriptionLength}/{MAX_DESCRIPTION_LENGTH}
-            </span>
-            {errors.description && (
-              <span role="alert" className="text-error text-xs">{errors.description}</span>
-            )}
-          </label>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={isSaving}
-            aria-busy={isSaving}
-            data-testid="income-save"
-            className="btn-primary px-5 py-3 flex items-center gap-2"
-          >
-            <span className="material-symbols-outlined text-lg" aria-hidden="true">
-              {editingId !== null ? 'save' : 'add'}
-            </span>
-            {isSaving ? 'Saving…' : editingId !== null ? 'Save changes' : 'Add income'}
-          </button>
-          {editingId !== null && (
-            <button
-              type="button"
-              onClick={resetForm}
-              disabled={isSaving}
-              className="btn-ghost px-4 py-3 text-sm text-on-surface-variant"
-            >
-              Cancel
-            </button>
-          )}
-        </div>
-        {confirmation && (
-          <p role="status" aria-live="polite" className="text-primary-container text-sm">
-            {confirmation}
-          </p>
-        )}
-      </form>
+        <IncomeEntryForm
+          // Remount when switching between add and a specific edit target so
+          // the form re-seeds its fields from the right record.
+          key={editing?.id ?? 'new'}
+          familyId={familyId}
+          existingIncome={editing ?? undefined}
+          onSaved={() => setEditing(null)}
+          onCancel={editing !== null ? () => setEditing(null) : undefined}
+        />
+      </section>
 
       {/* Income list. */}
       <section className="flex flex-col gap-3" aria-label="Recorded income">

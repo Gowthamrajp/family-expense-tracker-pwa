@@ -30,10 +30,10 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { useFamily } from '../state/FamilyProvider';
+import { AddEntry } from './AddEntry';
 import { AppShell } from './AppShell';
 import { CreateJoinFamily } from './CreateJoinFamily';
 import { Dashboard } from './Dashboard';
-import { ExpenseEntryForm } from './ExpenseEntryForm';
 import { ExpenseList } from './ExpenseList';
 import { FamilySettings } from './FamilySettings';
 import { Income } from './Income';
@@ -61,11 +61,12 @@ function ExpenseListRoute(): JSX.Element {
 }
 
 /**
- * Expense-entry wrapper that supplies the active family id from {@link useFamily}.
+ * Combined add-entry wrapper (expense or income) that supplies the active
+ * family id from {@link useFamily}.
  */
-function ExpenseEntryRoute(): JSX.Element {
+function AddEntryRoute(): JSX.Element {
   const { family } = useFamily();
-  return <ExpenseEntryForm familyId={family?.id ?? null} />;
+  return <AddEntry familyId={family?.id ?? null} />;
 }
 
 /**
@@ -120,7 +121,7 @@ export function AppRouter(): JSX.Element {
             <Route path="/insights" element={<InsightsRoute />} />
             <Route path="/recurring" element={<RecurringRoute />} />
             <Route path="/income" element={<IncomeRoute />} />
-            <Route path="/add" element={<ExpenseEntryRoute />} />
+            <Route path="/add" element={<AddEntryRoute />} />
             <Route path="/settings" element={<FamilySettings />} />
           </Route>
         </Route>

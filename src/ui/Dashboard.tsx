@@ -109,9 +109,9 @@ function ChartSection({
       aria-label={title}
     >
       <h2 className="text-base md:text-headline-md font-semibold text-on-surface">{title}</h2>
-      <div className="w-full h-[200px] md:h-[280px]">
+      <div className="w-full h-[260px] md:h-[320px]">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 8 }}>
+          <BarChart data={data} margin={{ top: 8, right: 16, bottom: 64, left: 8 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={ACCENT} stopOpacity={0.9} />
@@ -119,8 +119,21 @@ function ChartSection({
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-            <XAxis dataKey="key" tick={AXIS_TICK} tickLine={false} stroke="#3a494a" />
-            <YAxis tick={AXIS_TICK} tickLine={false} stroke="#3a494a" />
+            {/* Force every entity name to render (Recharts auto-skips when
+                crowded). Angle the labels and give the axis extra height so all
+                category/source/month names stay readable. */}
+            <XAxis
+              dataKey="key"
+              tick={AXIS_TICK}
+              tickLine={false}
+              stroke="#3a494a"
+              interval={0}
+              angle={-40}
+              textAnchor="end"
+              height={64}
+              tickMargin={8}
+            />
+            <YAxis tick={AXIS_TICK} tickLine={false} stroke="#3a494a" width={44} />
             <Tooltip
               cursor={{ fill: 'rgba(0,245,255,0.06)' }}
               contentStyle={TOOLTIP_CONTENT_STYLE}

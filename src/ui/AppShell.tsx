@@ -66,9 +66,14 @@ const NAV_LINKS: ReadonlyArray<{
   { to: '/settings', label: 'Family', icon: 'group' },
 ];
 
-/** Subset of {@link NAV_LINKS} shown in the mobile bottom nav (kept uncrowded). */
+/**
+ * Subset of {@link NAV_LINKS} shown in the mobile bottom nav (kept uncrowded).
+ * Adding income now lives inside the combined "Add" screen, so the separate
+ * Income tab is omitted on mobile to declutter the bar (income is still
+ * reachable from the desktop sidebar and the dashboard's income tile).
+ */
 const BOTTOM_NAV_LINKS = NAV_LINKS.filter((link) =>
-  ['/', '/expenses', '/income', '/insights', '/recurring', '/add', '/settings'].includes(
+  ['/', '/expenses', '/insights', '/recurring', '/add', '/settings'].includes(
     String(link.to),
   ),
 );
