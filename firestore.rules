@@ -82,6 +82,15 @@ service cloud.firestore {
                       && request.resource.data.recordedBy == request.auth.uid;
         allow update, delete: if isMember(familyId);
       }
+      // Emergency fund: family-scoped store of assets (cash, FD, gold, etc.).
+      // Members may read and manage them; create must be attributed to the
+      // caller. No card/PII data, so membership is the only gate beyond that.
+      match /emergencyFund/{assetId} {
+        allow read: if isMember(familyId);
+        allow create: if isMember(familyId)
+                      && request.resource.data.recordedBy == request.auth.uid;
+        allow update, delete: if isMember(familyId);
+      }
       match /categories/{categoryId} {
         allow read: if isMember(familyId);
         allow create: if isMember(familyId);

@@ -59,7 +59,6 @@ const NAV_LINKS: ReadonlyArray<{
 }> = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
   { to: '/expenses', label: 'Transactions', icon: 'receipt_long' },
-  { to: '/recurring', label: 'Recurring', icon: 'autorenew' },
   { to: '/add', label: 'Add', icon: 'add_circle' },
   { to: '/settings', label: 'Family', icon: 'group' },
 ];

@@ -37,7 +37,6 @@ import { Dashboard } from './Dashboard';
 import { ExpenseList } from './ExpenseList';
 import { FamilySettings } from './FamilySettings';
 import { Income } from './Income';
-import { Recurring } from './Recurring';
 import { RequireAuth } from './RequireAuth';
 import { RequireFamily } from './RequireFamily';
 import { SignIn } from './SignIn';
@@ -66,15 +65,6 @@ function ExpenseListRoute(): JSX.Element {
 function AddEntryRoute(): JSX.Element {
   const { family } = useFamily();
   return <AddEntry familyId={family?.id ?? null} />;
-}
-
-/**
- * Recurring-payments wrapper that supplies the active family id from
- * {@link useFamily}.
- */
-function RecurringRoute(): JSX.Element {
-  const { family } = useFamily();
-  return <Recurring familyId={family?.id ?? null} />;
 }
 
 /**
@@ -112,7 +102,9 @@ export function AppRouter(): JSX.Element {
             {/* Insights folded into the Dashboard; keep the path as a redirect
                 so existing links/bookmarks still resolve. */}
             <Route path="/insights" element={<Navigate to="/" replace />} />
-            <Route path="/recurring" element={<RecurringRoute />} />
+            {/* Recurring moved into Family settings; keep the path as a
+                redirect so existing links/bookmarks still resolve. */}
+            <Route path="/recurring" element={<Navigate to="/settings" replace />} />
             {/* Income has no nav ingress (added via /add, listed in
                 Transactions) but stays reachable by URL. */}
             <Route path="/income" element={<IncomeRoute />} />

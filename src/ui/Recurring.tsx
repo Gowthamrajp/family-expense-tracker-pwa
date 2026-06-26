@@ -63,12 +63,18 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
 /** Props for {@link Recurring}. */
 export interface RecurringProps {
   familyId?: string | null;
+  /**
+   * When true, render without the standalone page chrome (outer padding, page
+   * heading/intro) so the screen can be embedded inside another container such
+   * as the Family settings' collapsible "Recurring" card.
+   */
+  embedded?: boolean;
 }
 
 /**
  * Render the recurring-payments management screen.
  */
-export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element {
+export function Recurring({ familyId = null, embedded = false }: RecurringProps = {}): JSX.Element {
   const { member } = useAuth();
   const { categories } = useCategories(familyId);
   const { forCategory: subCategoriesForCategory, subCategories } = useSubCategories(familyId);
@@ -185,18 +191,24 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
     <section
       data-screen="recurring"
       aria-label="Recurring payments"
-      className="p-5 md:px-container_padding md:py-8 flex flex-col gap-grid_gap max-w-4xl"
+      className={
+        embedded
+          ? 'flex flex-col gap-grid_gap'
+          : 'p-5 md:px-container_padding md:py-8 flex flex-col gap-grid_gap max-w-4xl'
+      }
     >
-      <div>
-        <p className="text-label-caps uppercase tracking-widest text-primary-container mb-1">
-          Automation
-        </p>
-        <h1 className="text-headline-lg font-bold text-on-surface">Recurring payments</h1>
-        <p className="text-on-surface-variant text-body-md mt-2">
-          Define a payment once and we'll log it automatically each period when
-          the app is opened — catching up on any missed periods.
-        </p>
-      </div>
+      {!embedded && (
+        <div>
+          <p className="text-label-caps uppercase tracking-widest text-primary-container mb-1">
+            Automation
+          </p>
+          <h1 className="text-headline-lg font-bold text-on-surface">Recurring payments</h1>
+          <p className="text-on-surface-variant text-body-md mt-2">
+            Define a payment once and we'll log it automatically each period when
+            the app is opened — catching up on any missed periods.
+          </p>
+        </div>
+      )}
 
       {/* Add rule form. */}
       <section className="glass-card p-card_padding flex flex-col gap-4" aria-labelledby="add-recurring-heading">

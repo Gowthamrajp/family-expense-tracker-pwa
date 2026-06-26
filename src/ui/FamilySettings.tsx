@@ -36,6 +36,8 @@ import { useSubSources } from '../state/useSubSources';
 import { Loader } from './Loader';
 import { BudgetManager } from './BudgetManager';
 import { CollapsibleCard } from './CollapsibleCard';
+import { EmergencyFund } from './EmergencyFund';
+import { Recurring } from './Recurring';
 
 const CATEGORY_REQUIRED_MESSAGE = 'Enter a category name.';
 const CATEGORY_DUPLICATE_MESSAGE = 'That category already exists.';
@@ -119,6 +121,22 @@ export function FamilySettings(): JSX.Element {
         onRemoveMember={removeMember}
       />
       <BudgetManager familyId={familyId} />
+      <CollapsibleCard
+        title="Emergency fund"
+        icon="health_and_safety"
+        subtitle="Cash, deposits, gold and other assets set aside"
+        testId="emergency-fund-section"
+      >
+        <EmergencyFund familyId={familyId} />
+      </CollapsibleCard>
+      <CollapsibleCard
+        title="Recurring transactions"
+        icon="autorenew"
+        subtitle="Payments and income that repeat automatically"
+        testId="recurring-section"
+      >
+        <Recurring familyId={familyId} embedded />
+      </CollapsibleCard>
       <CategoryManager familyId={familyId} />
       <SourceManager familyId={familyId} />
     </main>

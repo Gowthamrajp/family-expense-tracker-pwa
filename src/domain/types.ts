@@ -412,6 +412,84 @@ export const DEFAULT_INCOME_SOURCES: readonly string[] = [
   'Other',
 ] as const;
 
+/**
+ * Kind of asset held in the family's emergency fund. A free-text `label` names
+ * the specific holding (e.g. "HDFC FD #2"); the type drives the icon and lets
+ * the fund be broken down by asset class.
+ */
+export type EmergencyFundAssetType =
+  | 'cash'
+  | 'bank'
+  | 'fd'
+  | 'gold'
+  | 'mutualFund'
+  | 'stocks'
+  | 'other';
+
+/** All valid {@link EmergencyFundAssetType} values, for selects. */
+export const EMERGENCY_FUND_ASSET_TYPES: readonly EmergencyFundAssetType[] = [
+  'cash',
+  'bank',
+  'fd',
+  'gold',
+  'mutualFund',
+  'stocks',
+  'other',
+] as const;
+
+/** Human label for each emergency-fund asset type. */
+export const EMERGENCY_FUND_ASSET_TYPE_LABELS: Record<EmergencyFundAssetType, string> = {
+  cash: 'Cash',
+  bank: 'Bank balance',
+  fd: 'Fixed deposit',
+  gold: 'Gold',
+  mutualFund: 'Mutual fund',
+  stocks: 'Stocks',
+  other: 'Other',
+};
+
+/**
+ * Validated emergency-fund asset input ready to persist. The emergency fund is
+ * a family-scoped store of liquid/near-liquid assets set aside for emergencies.
+ * Each asset records its class, a free-text label, its current INR value, and
+ * an optional note.
+ */
+export interface EmergencyFundAssetInput {
+  assetType: EmergencyFundAssetType;
+  /** Free-text name for the holding (e.g. "SBI FD", "Sovereign Gold Bond"). */
+  label: string;
+  /** Current value in INR (same numeric constraints as an amount). */
+  amount: number;
+  /** Optional note (e.g. maturity date, account). */
+  note: string;
+}
+
+/**
+ * Full client-side emergency-fund asset as read back, extending
+ * {@link EmergencyFundAssetInput} with identity and audit fields.
+ */
+export interface EmergencyFundAsset extends EmergencyFundAssetInput {
+  id: string;
+  recordedBy: string;
+  recordedByName?: string;
+  createdAt: Date;
+  updatedBy?: string;
+  updatedAt?: Date;
+}
+
+/** Document shape stored at `families/{familyId}/emergencyFund/{assetId}`. */
+export interface EmergencyFundAssetDocument {
+  assetType: string;
+  label: string;
+  amount: number;
+  note: string;
+  recordedBy: string;
+  recordedByName?: string;
+  createdAt: FirestoreTimestamp;
+  updatedBy?: string;
+  updatedAt?: FirestoreTimestamp;
+}
+
 
 /**
  * How a family's monthly budget target is expressed:
