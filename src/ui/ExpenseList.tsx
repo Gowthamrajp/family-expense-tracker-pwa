@@ -41,20 +41,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useExpenses } from '../state/useExpenses';
+import { useIncome } from '../state/useIncome';
 import { useCategories } from '../state/useCategories';
 import { useSubCategories } from '../state/useSubCategories';
 import { useSubSources } from '../state/useSubSources';
 import { resolveLabels, type ExpenseRow } from '../domain/expenseMapper';
-import { SOURCES, type Expense, type Source } from '../domain/types';
+import { SOURCES, type Expense, type Income, type Source } from '../domain/types';
 import { ExpenseEntryForm } from './ExpenseEntryForm';
+import { IncomeEntryForm } from './IncomeEntryForm';
 import { Money } from './Money';
 import { Loader } from './Loader';
 
-/** Message shown when no expenses exist for the family group (Req 3.6). */
-const EMPTY_STATE_MESSAGE = 'No expenses have been recorded yet.';
+/** Message shown when no transactions exist for the family group. */
+const EMPTY_STATE_MESSAGE = 'No transactions have been recorded yet.';
 
-/** Message shown when the expense list could not be loaded (Req 3.8). */
-const LOAD_ERROR_MESSAGE = 'Expenses could not be loaded.';
+/** Message shown when the transaction list could not be loaded (Req 3.8). */
+const LOAD_ERROR_MESSAGE = 'Transactions could not be loaded.';
 
 /**
  * Format a monetary amount as currency for display.
@@ -132,6 +134,120 @@ function sourceIcon(sourceName: string): string {
     }
   }
   return 'account_balance_wallet';
+}
+
+/** Props for {@link IncomeListRow}. */
+interface IncomeListRowProps {
+  income: Income;
+  onEdit: (income: Income) => void;
+  onDelete: (incomeId: string) => Promise<void>;
+}
+
+/**
+ * Render a single income record as a transaction row. Visually distinct from
+ * expenses: a green down-arrow chip and a green amount, signalling money IN.
+ */
+function IncomeListRow({ income, onEdit, onDelete }: IncomeListRowProps): JSX.Element {
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDelete = useCallback(async () => {
+    setIsDeleting(true);
+    try {
+      await onDelete(income.id);
+    } finally {
+      setIsDeleting(false);
+      setIsConfirming(false);
+    }
+  }, [income.id, onDelete]);
+
+  return (
+    <li
+      data-testid="transaction-row-income"
+      className="glass-card glass-card-hover p-3 md:p-4 flex items-center gap-3 md:gap-4"
+    >
+      {/* Income chip: green down-arrow signalling money in. */}
+      <div className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-emerald-400/10 flex items-center justify-center text-emerald-400">
+        <span className="material-symbols-outlined text-[20px] md:text-2xl" aria-hidden="true">
+          arrow_downward
+        </span>
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-semibold text-on-surface truncate">{income.source}</span>
+          <span className="text-[10px] uppercase tracking-wide text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded-full shrink-0">
+            Income
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap text-xs text-on-surface-variant mt-0.5">
+          <span className="opacity-70 italic">{income.recordedByName ?? 'Member'}</span>
+          {income.description.trim() !== '' && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="truncate">{income.description}</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="text-right shrink-0">
+        <Money
+          amount={income.amount}
+          className="block font-mono-data text-base md:text-lg font-semibold text-emerald-400"
+        />
+        <span className="block text-[11px] md:text-xs text-on-surface-variant mt-0.5">
+          {formatDate(income.date)}
+        </span>
+      </div>
+
+      <div className="shrink-0 flex items-center gap-1">
+        {isConfirming ? (
+          <>
+            <button
+              type="button"
+              onClick={() => void handleConfirmDelete()}
+              disabled={isDeleting}
+              aria-busy={isDeleting}
+              data-testid="income-delete-confirm"
+              className="btn-ghost px-2.5 py-1 text-xs text-error"
+            >
+              {isDeleting ? 'Deleting…' : 'Confirm'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsConfirming(false)}
+              disabled={isDeleting}
+              className="btn-ghost px-2.5 py-1 text-xs"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => onEdit(income)}
+              aria-label={`Edit income ${income.source}`}
+              data-testid="income-edit"
+              className="btn-ghost p-1.5 text-on-surface-variant hover:text-primary-container"
+            >
+              <span className="material-symbols-outlined text-lg" aria-hidden="true">edit</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsConfirming(true)}
+              aria-label={`Delete income ${income.source}`}
+              data-testid="income-delete"
+              className="btn-ghost p-1.5 text-on-surface-variant hover:text-error"
+            >
+              <span className="material-symbols-outlined text-lg" aria-hidden="true">delete</span>
+            </button>
+          </>
+        )}
+      </div>
+    </li>
+  );
 }
 
 /** Props for {@link ExpenseListRow}. */
@@ -356,6 +472,7 @@ export function ExpenseList({
   // SHIM (tasks 28.4/31): `familyId` defaults to `null` so the hooks stay idle
   // until `useFamily` supplies the active family id.
   const { expenses, status, retry, deleteExpense } = useExpenses(familyId, active);
+  const { incomes, deleteIncome } = useIncome(familyId, active);
 
   // Family categories and sub-sources supply the lookup data used to resolve
   // each expense's stored `categoryId`/`subSourceId` references to display
@@ -370,30 +487,35 @@ export function ExpenseList({
   // shown (Req 3.13). Holds the original {@link Expense} so the entry form can
   // pre-populate from the full stored record.
   const [editing, setEditing] = useState<Expense | null>(null);
+  // The income currently open in the edit modal, or `null` when none.
+  const [editingIncome, setEditingIncome] = useState<Income | null>(null);
 
   // The expense whose details drawer is open, or `null` when closed.
   const [selected, setSelected] = useState<Expense | null>(null);
 
-  // Filter controls: free-text search, source filter, and category filter.
+  // Filter controls: free-text search, source filter, category filter, and the
+  // transaction type (expense/income/all).
   const [searchText, setSearchText] = useState('');
   const [sourceFilter, setSourceFilter] = useState<Source | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'expense' | 'income'>('all');
 
   // Close the edit modal / details drawer on Escape so overlays are
   // keyboard-dismissible.
   useEffect(() => {
-    if (editing === null && selected === null) {
+    if (editing === null && selected === null && editingIncome === null) {
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setEditing(null);
         setSelected(null);
+        setEditingIncome(null);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [editing, selected]);
+  }, [editing, selected, editingIncome]);
 
   // Project each expense into a display-ready row with resolved labels, keeping
   // the original {@link Expense} alongside so the row's Edit affordance can open
@@ -405,37 +527,65 @@ export function ExpenseList({
     row: resolveLabels(expense, categories, subSources, subCategories),
   }));
 
-  // Apply the search/filter controls. Search matches the description, category
-  // name, source, or sub-source nickname (case-insensitive).
-  const entries = useMemo(() => {
+  // Build one chronologically-sorted timeline mixing expenses and income, then
+  // apply the search/filter controls. Each item is tagged by `kind` so the
+  // renderer can pick the right row. Income matches search on its source/note/
+  // recorder; the source/category selects only constrain expenses (income has
+  // no managed source/category), so selecting either hides income.
+  const timeline = useMemo(() => {
     const needle = searchText.trim().toLowerCase();
-    return allEntries.filter(({ row }) => {
-      if (sourceFilter !== 'all' && row.sourceName !== sourceFilter) {
-        return false;
-      }
-      if (categoryFilter !== 'all' && row.categoryName !== categoryFilter) {
-        return false;
-      }
-      if (needle !== '') {
-        const haystack = [
-          row.description,
-          row.categoryName,
-          row.sourceName,
-          row.subSourceNickname ?? '',
-          row.recordedByName ?? '',
-        ]
-          .join(' ')
-          .toLowerCase();
-        if (!haystack.includes(needle)) {
-          return false;
+
+    type Item =
+      | { kind: 'expense'; date: Date; expense: Expense; row: ExpenseRow }
+      | { kind: 'income'; date: Date; income: Income };
+
+    const items: Item[] = [];
+
+    if (typeFilter !== 'income') {
+      for (const entry of allEntries) {
+        const { row } = entry;
+        if (sourceFilter !== 'all' && row.sourceName !== sourceFilter) continue;
+        if (categoryFilter !== 'all' && row.categoryName !== categoryFilter) continue;
+        if (needle !== '') {
+          const haystack = [
+            row.description,
+            row.categoryName,
+            row.sourceName,
+            row.subSourceNickname ?? '',
+            row.recordedByName ?? '',
+          ]
+            .join(' ')
+            .toLowerCase();
+          if (!haystack.includes(needle)) continue;
         }
+        items.push({ kind: 'expense', date: entry.expense.date, expense: entry.expense, row });
       }
-      return true;
-    });
-  }, [allEntries, searchText, sourceFilter, categoryFilter]);
+    }
+
+    // Income is included only when not filtering by a managed source/category
+    // (those don't apply to income) and the type filter allows it.
+    if (typeFilter !== 'expense' && sourceFilter === 'all' && categoryFilter === 'all') {
+      for (const income of incomes) {
+        if (needle !== '') {
+          const haystack = [income.source, income.description, income.recordedByName ?? '']
+            .join(' ')
+            .toLowerCase();
+          if (!haystack.includes(needle)) continue;
+        }
+        items.push({ kind: 'income', date: income.date, income });
+      }
+    }
+
+    // Most-recent first; stable for equal dates.
+    items.sort((a, b) => b.date.getTime() - a.date.getTime());
+    return items;
+  }, [allEntries, incomes, searchText, sourceFilter, categoryFilter, typeFilter]);
 
   const isFiltering =
-    searchText.trim() !== '' || sourceFilter !== 'all' || categoryFilter !== 'all';
+    searchText.trim() !== '' ||
+    sourceFilter !== 'all' ||
+    categoryFilter !== 'all' ||
+    typeFilter !== 'all';
 
   return (
     <section
@@ -446,7 +596,7 @@ export function ExpenseList({
       <h1 className="text-headline-lg font-bold text-on-surface">Transactions</h1>
 
       {/* Search + filter bar (transaction history). */}
-      {(status !== 'loading' || allEntries.length > 0) && (
+      {(status !== 'loading' || allEntries.length > 0 || incomes.length > 0) && (
         <div className="glass-card p-4 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px]">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base" aria-hidden="true">
@@ -462,6 +612,17 @@ export function ExpenseList({
               className="ghost-input w-full py-2.5 pl-10 pr-4 text-body-md"
             />
           </div>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as 'all' | 'expense' | 'income')}
+            aria-label="Filter by type"
+            data-testid="expense-filter-type"
+            className="ghost-input px-3 py-2.5 text-sm flex-1 min-w-[8rem] sm:flex-none"
+          >
+            <option value="all">All types</option>
+            <option value="expense">Expenses</option>
+            <option value="income">Income</option>
+          </select>
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value as Source | 'all')}
@@ -493,6 +654,7 @@ export function ExpenseList({
                 setSearchText('');
                 setSourceFilter('all');
                 setCategoryFilter('all');
+                setTypeFilter('all');
               }}
               className="btn-ghost px-3 py-2 text-sm"
             >
@@ -504,7 +666,7 @@ export function ExpenseList({
 
       {/* Loading indicator while the list is being retrieved (Req 3.7). */}
       {status === 'loading' && (
-        <Loader label="Loading expenses…" block testId="expense-loading" />
+        <Loader label="Loading transactions…" block testId="expense-loading" />
       )}
 
       {/*
@@ -530,9 +692,9 @@ export function ExpenseList({
         </div>
       )}
 
-      {/* Empty state once a successful read returns no expenses (Req 3.6),
-          or when active filters match nothing. */}
-      {status === 'ready' && entries.length === 0 && (
+      {/* Empty state once a successful read returns nothing, or when active
+          filters match nothing. */}
+      {status === 'ready' && timeline.length === 0 && (
         <div className="glass-card p-card_padding flex flex-col items-center gap-3 text-center">
           <span className="material-symbols-outlined text-primary-container text-4xl" aria-hidden="true">
             {isFiltering ? 'search_off' : 'receipt_long'}
@@ -545,19 +707,28 @@ export function ExpenseList({
         </div>
       )}
 
-      {/* Ordered expense list (Req 3.1, 3.2, 3.4, 6.1, 6.2, 6.3). */}
-      {entries.length > 0 && (
+      {/* Unified, date-sorted transaction list mixing expenses and income. */}
+      {timeline.length > 0 && (
         <ul className="list-none m-0 p-0 flex flex-col gap-3">
-          {entries.map(({ expense, row }) => (
-            <ExpenseListRow
-              key={row.id}
-              row={row}
-              expense={expense}
-              onEdit={setEditing}
-              onDelete={deleteExpense}
-              onSelect={setSelected}
-            />
-          ))}
+          {timeline.map((item) =>
+            item.kind === 'expense' ? (
+              <ExpenseListRow
+                key={`exp-${item.row.id}`}
+                row={item.row}
+                expense={item.expense}
+                onEdit={setEditing}
+                onDelete={deleteExpense}
+                onSelect={setSelected}
+              />
+            ) : (
+              <IncomeListRow
+                key={`inc-${item.income.id}`}
+                income={item.income}
+                onEdit={setEditingIncome}
+                onDelete={deleteIncome}
+              />
+            ),
+          )}
         </ul>
       )}
 
@@ -623,6 +794,45 @@ export function ExpenseList({
             setSelected(null);
           }}
         />
+      )}
+
+      {/* Income edit modal: mounts the shared income form seeded with the
+          selected record. */}
+      {editingIncome !== null && (
+        <div
+          className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/70 backdrop-blur-sm p-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setEditingIncome(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Edit income"
+            data-testid="income-edit-modal"
+            className="relative w-full max-w-xl my-8"
+          >
+            <button
+              type="button"
+              onClick={() => setEditingIncome(null)}
+              aria-label="Close edit form"
+              className="absolute right-3 top-3 z-10 btn-ghost p-1.5 text-on-surface-variant hover:text-on-surface"
+            >
+              <span className="material-symbols-outlined text-lg" aria-hidden="true">close</span>
+            </button>
+            <section className="glass-card p-card_padding flex flex-col gap-4">
+              <h2 className="text-headline-md font-semibold text-on-surface">Edit income</h2>
+              <IncomeEntryForm
+                familyId={familyId}
+                existingIncome={editingIncome}
+                onSaved={() => setEditingIncome(null)}
+                onCancel={() => setEditingIncome(null)}
+              />
+            </section>
+          </div>
+        </div>
       )}
     </section>
   );

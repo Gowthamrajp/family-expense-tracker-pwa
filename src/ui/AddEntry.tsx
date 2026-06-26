@@ -51,7 +51,7 @@ export function AddEntry({ familyId = null, initialMode = 'expense' }: AddEntryP
             }`}
           >
             <span className="material-symbols-outlined text-base" aria-hidden="true">
-              south_west
+              arrow_upward
             </span>
             Expense
           </button>
@@ -68,7 +68,7 @@ export function AddEntry({ familyId = null, initialMode = 'expense' }: AddEntryP
             }`}
           >
             <span className="material-symbols-outlined text-base" aria-hidden="true">
-              north_east
+              arrow_downward
             </span>
             Income
           </button>

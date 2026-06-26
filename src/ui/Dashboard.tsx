@@ -32,6 +32,8 @@
  * {@link ../domain/aggregation}. Charts are wrapped in Recharts'
  * `ResponsiveContainer` and themed to the dark glass aesthetic.
  */
+import { useState } from 'react';
+
 import {
   Bar,
   BarChart,
@@ -55,6 +57,7 @@ import {
 import type { GroupTotal } from '../domain/types';
 import { Money, formatINR } from './Money';
 import { Loader } from './Loader';
+import { Insights } from './Insights';
 
 /** Message shown when no expenses exist for the family group (Req 4.6). */
 const EMPTY_STATE_MESSAGE = 'No expenses have been recorded yet.';
@@ -171,6 +174,11 @@ export function Dashboard({
   familyId = null,
   active = true,
 }: { familyId?: string | null; active?: boolean } = {}): JSX.Element {
+  // Dashboard now hosts both the at-a-glance overview and the deeper Insights
+  // (they were redundant as separate screens). A segmented toggle switches
+  // between them.
+  const [view, setView] = useState<'overview' | 'insights'>('overview');
+
   // SHIM (tasks 28.4/31): `familyId` defaults to `null` so the hook stays idle
   // until `useFamily` supplies the active family id.
   const { expenses, status, retry } = useExpenses(familyId, active);
@@ -217,8 +225,51 @@ export function Dashboard({
       aria-label="Spending dashboard"
       className="p-4 md:px-container_padding md:py-8 flex flex-col gap-4 md:gap-grid_gap"
     >
-      <h1 className="text-2xl md:text-headline-lg font-bold text-on-surface">Dashboard</h1>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h1 className="text-2xl md:text-headline-lg font-bold text-on-surface">Dashboard</h1>
+        {/* Overview / Insights toggle (Insights folded into the dashboard). */}
+        <div
+          role="tablist"
+          aria-label="Dashboard view"
+          className="flex bg-surface-container-low rounded-full p-1 border border-outline-variant/20"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'overview'}
+            onClick={() => setView('overview')}
+            data-testid="dashboard-view-overview"
+            className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${
+              view === 'overview'
+                ? 'bg-primary-container text-on-primary'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            Overview
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'insights'}
+            onClick={() => setView('insights')}
+            data-testid="dashboard-view-insights"
+            className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${
+              view === 'insights'
+                ? 'bg-primary-container text-on-primary'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            Insights
+          </button>
+        </div>
+      </div>
 
+      {/* Insights view: reuse the full Insights screen inline. */}
+      {view === 'insights' && <Insights familyId={familyId} active={active} />}
+
+      {/* Overview view below. */}
+      {view === 'overview' && (
+      <>
       {/* Loading indicator while the data is being retrieved. */}
       {status === 'loading' && (
         <Loader label="Loading dashboard…" block testId="dashboard-loading" />
@@ -276,7 +327,7 @@ export function Dashboard({
               className="text-[clamp(20px,5vw,48px)] leading-none font-extrabold tracking-tighter text-white neon-glow"
             />
             <span className="material-symbols-outlined absolute right-3 top-3 md:right-6 md:top-6 text-error/30 text-2xl md:text-4xl pointer-events-none" aria-hidden="true">
-              south_west
+              arrow_upward
             </span>
           </div>
           <div className="col-span-6 lg:col-span-4 glass-card glass-card-hover p-4 md:p-card_padding relative overflow-hidden">
@@ -286,10 +337,10 @@ export function Dashboard({
             <Money
               amount={totalIncomeAmount}
               testId="dashboard-income-total"
-              className="text-[clamp(20px,5vw,48px)] leading-none font-extrabold tracking-tighter text-primary-container neon-glow"
+              className="text-[clamp(20px,5vw,48px)] leading-none font-extrabold tracking-tighter text-emerald-400 neon-glow"
             />
-            <span className="material-symbols-outlined absolute right-3 top-3 md:right-6 md:top-6 text-primary-container/30 text-2xl md:text-4xl pointer-events-none" aria-hidden="true">
-              north_east
+            <span className="material-symbols-outlined absolute right-3 top-3 md:right-6 md:top-6 text-emerald-400/30 text-2xl md:text-4xl pointer-events-none" aria-hidden="true">
+              arrow_downward
             </span>
           </div>
           <div className="col-span-12 lg:col-span-4 glass-card glass-card-hover p-4 md:p-card_padding relative overflow-hidden">
@@ -300,7 +351,7 @@ export function Dashboard({
               amount={netBalance}
               testId="dashboard-net-balance"
               className={`text-[clamp(20px,5vw,48px)] leading-none font-extrabold tracking-tighter neon-glow ${
-                netBalance >= 0 ? 'text-primary-container' : 'text-error'
+                netBalance >= 0 ? 'text-emerald-400' : 'text-error'
               }`}
             />
             <p className="text-xs text-on-surface-variant mt-1 md:mt-2">
@@ -340,6 +391,8 @@ export function Dashboard({
             </>
           )}
         </div>
+      )}
+      </>
       )}
     </section>
   );

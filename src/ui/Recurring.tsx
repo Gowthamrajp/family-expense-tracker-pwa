@@ -15,6 +15,7 @@
 import { useMemo, useState } from 'react';
 
 import {
+  DEFAULT_INCOME_SOURCES,
   RECURRING_FREQUENCIES,
   type RecurringFrequency,
   type RecurringRule,
@@ -79,6 +80,7 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
   );
 
   const [amount, setAmount] = useState('');
+  const [kind, setKind] = useState<'expense' | 'income'>('expense');
   const [categoryId, setCategoryId] = useState('');
   const [subCategoryId, setSubCategoryId] = useState('');
   const [source, setSource] = useState<string>('');
@@ -114,10 +116,11 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
     if (isAdding) {
       return;
     }
+    const isIncome = kind === 'income';
     // Client-side guard: require a sub-category when the chosen category has
     // any, so recurring expenses are classified to the same depth as manual
-    // ones (keeps insights/budgets consistent).
-    if (subCategoryOptions.length > 0 && subCategoryId === '') {
+    // ones (keeps insights/budgets consistent). Income rules have no category.
+    if (!isIncome && subCategoryOptions.length > 0 && subCategoryId === '') {
       setErrors({ subCategory: true });
       setConfirmation(null);
       return;
@@ -128,6 +131,7 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
     try {
       const result = await addRule(
         {
+          kind,
           amount,
           categoryId,
           subCategoryId,
@@ -146,11 +150,12 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
         setSubSourceId('');
         setSubCategoryId('');
         setCategoryId('');
+        setSource('');
         setBackfill(false);
         setConfirmation(
           backfill
-            ? 'Recurring payment added and past transactions backfilled.'
-            : 'Recurring payment added.',
+            ? `Recurring ${isIncome ? 'income' : 'payment'} added and past transactions backfilled.`
+            : `Recurring ${isIncome ? 'income' : 'payment'} added.`,
         );
       } else {
         setErrors(result.error);
@@ -196,8 +201,47 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
       {/* Add rule form. */}
       <section className="glass-card p-card_padding flex flex-col gap-4" aria-labelledby="add-recurring-heading">
         <h2 id="add-recurring-heading" className="text-headline-md font-semibold text-on-surface">
-          New recurring payment
+          New recurring {kind === 'income' ? 'income' : 'payment'}
         </h2>
+
+        {/* Expense / Income toggle. */}
+        <div
+          role="tablist"
+          aria-label="Recurring type"
+          className="flex bg-surface-container-low rounded-full p-1 border border-outline-variant/20 self-start"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={kind === 'expense'}
+            onClick={() => { setKind('expense'); setErrors({}); setConfirmation(null); }}
+            data-testid="recurring-kind-expense"
+            className={`px-4 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-all ${
+              kind === 'expense'
+                ? 'bg-primary-container text-on-primary'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base" aria-hidden="true">arrow_upward</span>
+            Expense
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={kind === 'income'}
+            onClick={() => { setKind('income'); setErrors({}); setConfirmation(null); }}
+            data-testid="recurring-kind-income"
+            className={`px-4 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-all ${
+              kind === 'income'
+                ? 'bg-primary-container text-on-primary'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base" aria-hidden="true">arrow_downward</span>
+            Income
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label className={FIELD_CLASS}>
             Amount
@@ -228,6 +272,34 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
               ))}
             </select>
           </label>
+
+          {/* Income rules use a single free-text source label and skip the
+              managed category/source fields. */}
+          {kind === 'income' ? (
+            <label className={`${FIELD_CLASS} sm:col-span-2`}>
+              Source
+              <input
+                type="text"
+                list="recurring-income-source-suggestions"
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                disabled={isAdding}
+                placeholder="Salary, Interest, …"
+                aria-invalid={errors.source === true}
+                className={CONTROL_CLASS}
+                autoComplete="off"
+              />
+              <datalist id="recurring-income-source-suggestions">
+                {DEFAULT_INCOME_SOURCES.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+              {errors.source && (
+                <span role="alert" className="text-error text-xs">Enter an income source.</span>
+              )}
+            </label>
+          ) : (
+            <>
           <label className={FIELD_CLASS}>
             Category
             <select
@@ -314,6 +386,8 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
               </select>
             </label>
           )}
+            </>
+          )}
           <label className={FIELD_CLASS}>
             Start date
             <input
@@ -365,7 +439,11 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
           className="btn-primary px-5 py-3 self-start flex items-center gap-2"
         >
           <span className="material-symbols-outlined text-lg" aria-hidden="true">autorenew</span>
-          {isAdding ? 'Adding…' : 'Add recurring payment'}
+          {isAdding
+            ? 'Adding…'
+            : kind === 'income'
+              ? 'Add recurring income'
+              : 'Add recurring payment'}
         </button>
         {confirmation && (
           <p role="status" className="text-primary-container text-sm">{confirmation}</p>
@@ -386,11 +464,15 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
         ) : (
           <ul className="flex flex-col gap-3">
             {rules.map((rule) => {
+              const isIncome = rule.kind === 'income';
               const categoryName = categoryNameById.get(rule.categoryId) ?? 'Category';
               const subCategoryName =
                 rule.subCategoryId !== undefined
                   ? subCategoryNameById.get(rule.subCategoryId)
                   : undefined;
+              // Income rules title on their free-text source; expense rules on
+              // the category (+ optional sub-category).
+              const title = isIncome ? rule.source : categoryName;
               const isDeleting = deletingId === rule.id;
               return (
                 <li
@@ -398,17 +480,30 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
                   data-testid="recurring-row"
                   className="glass-card glass-card-hover p-4 flex items-center gap-4"
                 >
-                  <div className="shrink-0 w-11 h-11 rounded-lg bg-primary-container/10 flex items-center justify-center text-primary-container">
-                    <span className="material-symbols-outlined" aria-hidden="true">autorenew</span>
+                  <div
+                    className={`shrink-0 w-11 h-11 rounded-lg flex items-center justify-center ${
+                      isIncome
+                        ? 'bg-emerald-400/10 text-emerald-400'
+                        : 'bg-primary-container/10 text-primary-container'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined" aria-hidden="true">
+                      {isIncome ? 'arrow_downward' : 'autorenew'}
+                    </span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-on-surface">
-                        {categoryName}
-                        {subCategoryName !== undefined && (
+                        {title}
+                        {!isIncome && subCategoryName !== undefined && (
                           <span className="text-on-surface-variant font-normal"> · {subCategoryName}</span>
                         )}
                       </span>
+                      {isIncome && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-400/10 text-emerald-400 uppercase tracking-wide">
+                          Income
+                        </span>
+                      )}
                       <span className="text-xs px-2 py-0.5 rounded-full bg-surface-container-high/60 text-on-surface-variant uppercase tracking-wide">
                         {frequencyLabel(rule.frequency)}
                       </span>
@@ -419,8 +514,12 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
                       )}
                     </div>
                     <div className="text-xs text-on-surface-variant mt-0.5 flex items-center gap-2 flex-wrap">
-                      <span>{rule.source}</span>
-                      <span aria-hidden="true">•</span>
+                      {!isIncome && (
+                        <>
+                          <span>{rule.source}</span>
+                          <span aria-hidden="true">•</span>
+                        </>
+                      )}
                       <span>Since {dateFormatter.format(rule.startDate)}</span>
                       {rule.description && (
                         <>
@@ -430,7 +529,12 @@ export function Recurring({ familyId = null }: RecurringProps = {}): JSX.Element
                       )}
                     </div>
                   </div>
-                  <Money amount={rule.amount} className="font-mono-data text-lg font-semibold text-white shrink-0" />
+                  <Money
+                    amount={rule.amount}
+                    className={`font-mono-data text-lg font-semibold shrink-0 ${
+                      isIncome ? 'text-emerald-400' : 'text-white'
+                    }`}
+                  />
                   <div className="shrink-0 flex items-center gap-1">
                     <button
                       type="button"

@@ -33,6 +33,7 @@ import { dueOccurrences } from '../domain/recurring';
 import type {
   ExpenseInput,
   FamilyMember,
+  IncomeInput,
   RecurringFrequency,
   RecurringRule,
   RecurringRuleDocument,
@@ -40,6 +41,7 @@ import type {
   Source,
 } from '../domain/types';
 import { expenseRepository } from './expenseRepository';
+import { incomeRepository } from './incomeRepository';
 import { firestore } from './firebase';
 
 /** Name of the top-level families collection. */
@@ -65,8 +67,9 @@ function readRule(snapshot: QueryDocumentSnapshot<DocumentData>): RecurringRule 
   const data = snapshot.data() as RecurringRuleDocument;
   const rule: RecurringRule = {
     id: snapshot.id,
+    kind: data.kind === 'income' ? 'income' : 'expense',
     amount: data.amount,
-    categoryId: data.categoryId,
+    categoryId: data.categoryId ?? '',
     source: data.source as Source,
     description: data.description ?? '',
     frequency: data.frequency as RecurringFrequency,
@@ -164,6 +167,48 @@ async function readAllRules(familyId: string): Promise<RecurringRule[]> {
 }
 
 /**
+ * Materialize a single occurrence of a rule into the appropriate ledger: an
+ * income record for income rules, otherwise an expense. Each generated record
+ * is tagged with the rule id so it can be cleaned up if the rule is deleted.
+ */
+async function materializeOccurrence(
+  familyId: string,
+  rule: RecurringRule,
+  occurrence: Date,
+  member: FamilyMember,
+): Promise<void> {
+  if (rule.kind === 'income') {
+    const income: IncomeInput = {
+      amount: rule.amount,
+      source: rule.source,
+      date: occurrence,
+      description: rule.description,
+      recurringRuleId: rule.id,
+    };
+    await incomeRepository.addIncome(familyId, income, member);
+    return;
+  }
+
+  const expense: ExpenseInput = {
+    amount: rule.amount,
+    // Legacy enum shim: the canonical reference is categoryId.
+    category: 'Other',
+    categoryId: rule.categoryId,
+    source: rule.source,
+    date: occurrence,
+    description: rule.description,
+    recurringRuleId: rule.id,
+  };
+  if (rule.subSourceId !== undefined) {
+    expense.subSourceId = rule.subSourceId;
+  }
+  if (rule.subCategoryId !== undefined) {
+    expense.subCategoryId = rule.subCategoryId;
+  }
+  await expenseRepository.addExpense(familyId, expense, member);
+}
+
+/**
  * Live {@link RecurringRepository} backed by the initialized Firestore instance.
  */
 export const recurringRepository: RecurringRepository = {
@@ -200,6 +245,9 @@ export const recurringRepository: RecurringRepository = {
       createdBy: member.uid,
       createdAt: serverTimestamp(),
     };
+    if (input.kind === 'income') {
+      docData.kind = 'income';
+    }
     if (input.subSourceId !== undefined && input.subSourceId !== '') {
       docData.subSourceId = input.subSourceId;
     }
@@ -224,6 +272,7 @@ export const recurringRepository: RecurringRepository = {
     // start date.
     const rule: RecurringRule = {
       id,
+      kind: input.kind === 'income' ? 'income' : 'expense',
       amount: input.amount,
       categoryId: input.categoryId,
       source: input.source,
@@ -245,22 +294,7 @@ export const recurringRepository: RecurringRepository = {
     const due = dueOccurrences(rule, today);
     let created = 0;
     for (const occurrence of due) {
-      const expenseInput: ExpenseInput = {
-        amount: rule.amount,
-        category: 'Other',
-        categoryId: rule.categoryId,
-        source: rule.source,
-        date: occurrence,
-        description: rule.description,
-        recurringRuleId: id,
-      };
-      if (rule.subSourceId !== undefined) {
-        expenseInput.subSourceId = rule.subSourceId;
-      }
-      if (rule.subCategoryId !== undefined) {
-        expenseInput.subCategoryId = rule.subCategoryId;
-      }
-      await expenseRepository.addExpense(familyId, expenseInput, member);
+      await materializeOccurrence(familyId, rule, occurrence, member);
       created += 1;
     }
 
@@ -283,14 +317,19 @@ export const recurringRepository: RecurringRepository = {
     familyId: string,
     ruleId: string,
   ): Promise<number> {
-    // Remove the generated expenses first, then the rule itself. If the
-    // expense cleanup fails the rule remains, so the user can retry.
-    const deleted = await expenseRepository.deleteExpensesByRecurringRule(
+    // Remove the generated records first, then the rule itself. A rule only
+    // generates one kind, but we clear both ledgers defensively so nothing is
+    // orphaned. If cleanup fails the rule remains, so the user can retry.
+    const deletedExpenses = await expenseRepository.deleteExpensesByRecurringRule(
+      familyId,
+      ruleId,
+    );
+    const deletedIncomes = await incomeRepository.deleteIncomesByRecurringRule(
       familyId,
       ruleId,
     );
     await deleteDoc(doc(recurringCollection(familyId), ruleId));
-    return deleted;
+    return deletedExpenses + deletedIncomes;
   },
 
   async setRuleActive(
@@ -316,26 +355,10 @@ export const recurringRepository: RecurringRepository = {
       }
 
       try {
-        // Generate one Expense per due occurrence, preserving the occurrence
-        // date as the Expense date so catch-up entries are dated correctly.
+        // Generate one record per due occurrence (income or expense depending
+        // on the rule kind), preserving the occurrence date.
         for (const occurrence of due) {
-          const input: ExpenseInput = {
-            amount: rule.amount,
-            // Legacy enum shim: the canonical reference is categoryId.
-            category: 'Other',
-            categoryId: rule.categoryId,
-            source: rule.source,
-            date: occurrence,
-            description: rule.description,
-          };
-          if (rule.subSourceId !== undefined) {
-            input.subSourceId = rule.subSourceId;
-          }
-          if (rule.subCategoryId !== undefined) {
-            input.subCategoryId = rule.subCategoryId;
-          }
-          input.recurringRuleId = rule.id;
-          await expenseRepository.addExpense(familyId, input, member);
+          await materializeOccurrence(familyId, rule, occurrence, member);
           created += 1;
         }
 

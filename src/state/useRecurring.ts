@@ -30,6 +30,8 @@ export type RecurringStatus = 'loading' | 'ready' | 'error';
 
 /** Raw, unvalidated values captured from the add-recurring form. */
 export interface RecurringFormInput {
+  /** Whether the rule generates an expense (default) or income. */
+  kind?: 'expense' | 'income';
   amount: string;
   categoryId: string;
   subCategoryId: string;
@@ -120,12 +122,14 @@ export function useRecurring(
       backfill = false,
     ): Promise<Result<RecurringRule, RecurringFormErrors>> => {
       const errors: RecurringFormErrors = {};
+      const isIncome = input.kind === 'income';
 
       const amountResult = validateAmount(input.amount);
       if (!amountResult.ok) {
         errors.amount = true;
       }
-      if (input.categoryId === '') {
+      // Income rules have no category; expense rules require one.
+      if (!isIncome && input.categoryId === '') {
         errors.category = true;
       }
       if (!isSource(input.source)) {
@@ -147,27 +151,30 @@ export function useRecurring(
       }
 
       const ruleInput: RecurringRuleInput = {
+        kind: isIncome ? 'income' : 'expense',
         amount: (amountResult as { ok: true; value: number }).value,
-        categoryId: input.categoryId,
+        categoryId: isIncome ? '' : input.categoryId,
         source: input.source as Source,
         description: input.description,
         frequency: input.frequency as RecurringFrequency,
         startDate: (dateResult as { ok: true; value: Date }).value,
       };
-      if (input.subSourceId !== '') {
+      // Sub-source/sub-category only apply to expense rules.
+      if (!isIncome && input.subSourceId !== '') {
         ruleInput.subSourceId = input.subSourceId;
       }
-      if (input.subCategoryId !== '') {
+      if (!isIncome && input.subCategoryId !== '') {
         ruleInput.subCategoryId = input.subCategoryId;
       }
 
-      // When backfill is requested, generate expenses for every occurrence
+      // When backfill is requested, generate records for every occurrence
       // from the start date through today; otherwise just create the rule.
       const id = backfill
         ? (await recurringRepository.addRuleWithBackfill(familyId, ruleInput, member)).id
         : await recurringRepository.addRule(familyId, ruleInput, member);
       return ok({
         id,
+        kind: isIncome ? 'income' : 'expense',
         ...ruleInput,
         lastRunDate: null,
         active: true,

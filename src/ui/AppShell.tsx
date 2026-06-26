@@ -59,24 +59,17 @@ const NAV_LINKS: ReadonlyArray<{
 }> = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
   { to: '/expenses', label: 'Transactions', icon: 'receipt_long' },
-  { to: '/income', label: 'Income', icon: 'payments' },
-  { to: '/insights', label: 'Insights', icon: 'leaderboard' },
   { to: '/recurring', label: 'Recurring', icon: 'autorenew' },
   { to: '/add', label: 'Add', icon: 'add_circle' },
   { to: '/settings', label: 'Family', icon: 'group' },
 ];
 
 /**
- * Subset of {@link NAV_LINKS} shown in the mobile bottom nav (kept uncrowded).
- * Adding income now lives inside the combined "Add" screen, so the separate
- * Income tab is omitted on mobile to declutter the bar (income is still
- * reachable from the desktop sidebar and the dashboard's income tile).
+ * Subset of {@link NAV_LINKS} shown in the mobile bottom nav. With Insights
+ * folded into the Dashboard and income captured via Add / shown in
+ * Transactions, the bar is a tidy five items.
  */
-const BOTTOM_NAV_LINKS = NAV_LINKS.filter((link) =>
-  ['/', '/expenses', '/insights', '/recurring', '/add', '/settings'].includes(
-    String(link.to),
-  ),
-);
+const BOTTOM_NAV_LINKS = NAV_LINKS;
 
 /** Shared className for a desktop sidebar nav link, depending on active state. */
 function sidebarLinkClass(isActive: boolean): string {

@@ -357,6 +357,13 @@ export interface IncomeInput {
   source: string;
   date: Date;
   description: string;
+  /**
+   * Id of the {@link RecurringRule} that generated this income, when it was
+   * materialized from a recurring income rule (manual entries omit it). Lets
+   * the app optionally remove a rule's generated income when the rule is
+   * deleted, mirroring {@link ExpenseInput.recurringRuleId}.
+   */
+  recurringRuleId?: string;
 }
 
 /**
@@ -383,6 +390,8 @@ export interface IncomeDocument {
   source: string;
   date: FirestoreTimestamp;
   description: string;
+  /** Id of the {@link RecurringRule} that generated this income, when any. */
+  recurringRuleId?: string;
   recordedBy: string;
   recordedByName?: string;
   createdAt: FirestoreTimestamp;
@@ -527,6 +536,13 @@ export const RECURRING_FREQUENCIES: readonly RecurringFrequency[] = [
  */
 export interface RecurringRule {
   id: string;
+  /**
+   * Whether this rule generates an Expense (money out) or an Income (money in).
+   * Defaults to `'expense'` for rules created before income recurrence existed.
+   * For `'income'` rules, `categoryId`/`subCategoryId`/`subSourceId` are unused
+   * and `source` holds the free-text income label (e.g. "Salary").
+   */
+  kind: 'expense' | 'income';
   /** Template amount (same constraints as an Expense amount). */
   amount: number;
   /** Family Category id the generated Expense is filed under. */
@@ -559,6 +575,8 @@ export interface RecurringRule {
 
 /** Validated recurring-rule input ready to persist (no id/audit fields). */
 export interface RecurringRuleInput {
+  /** Expense (money out) or income (money in). Defaults to `'expense'`. */
+  kind?: 'expense' | 'income';
   amount: number;
   categoryId: string;
   subCategoryId?: string;
@@ -573,6 +591,8 @@ export interface RecurringRuleInput {
  * Document shape stored at `families/{familyId}/recurringRules/{ruleId}`.
  */
 export interface RecurringRuleDocument {
+  /** Expense (money out) or income (money in). Absent ⇒ legacy expense rule. */
+  kind?: 'expense' | 'income';
   amount: number;
   categoryId: string;
   subCategoryId?: string;
