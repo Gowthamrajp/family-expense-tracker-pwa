@@ -32,8 +32,6 @@
  * {@link ../domain/aggregation}. Charts are wrapped in Recharts'
  * `ResponsiveContainer` and themed to the dark glass aesthetic.
  */
-import { useState } from 'react';
-
 import {
   Bar,
   BarChart,
@@ -174,11 +172,6 @@ export function Dashboard({
   familyId = null,
   active = true,
 }: { familyId?: string | null; active?: boolean } = {}): JSX.Element {
-  // Dashboard now hosts both the at-a-glance overview and the deeper Insights
-  // (they were redundant as separate screens). A segmented toggle switches
-  // between them.
-  const [view, setView] = useState<'overview' | 'insights'>('overview');
-
   // SHIM (tasks 28.4/31): `familyId` defaults to `null` so the hook stays idle
   // until `useFamily` supplies the active family id.
   const { expenses, status, retry } = useExpenses(familyId, active);
@@ -225,51 +218,8 @@ export function Dashboard({
       aria-label="Spending dashboard"
       className="p-4 md:px-container_padding md:py-8 flex flex-col gap-4 md:gap-grid_gap"
     >
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl md:text-headline-lg font-bold text-on-surface">Dashboard</h1>
-        {/* Overview / Insights toggle (Insights folded into the dashboard). */}
-        <div
-          role="tablist"
-          aria-label="Dashboard view"
-          className="flex bg-surface-container-low rounded-full p-1 border border-outline-variant/20"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === 'overview'}
-            onClick={() => setView('overview')}
-            data-testid="dashboard-view-overview"
-            className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${
-              view === 'overview'
-                ? 'bg-primary-container text-on-primary'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            Overview
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === 'insights'}
-            onClick={() => setView('insights')}
-            data-testid="dashboard-view-insights"
-            className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all ${
-              view === 'insights'
-                ? 'bg-primary-container text-on-primary'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            Insights
-          </button>
-        </div>
-      </div>
+      <h1 className="text-2xl md:text-headline-lg font-bold text-on-surface">Dashboard</h1>
 
-      {/* Insights view: reuse the full Insights screen inline. */}
-      {view === 'insights' && <Insights familyId={familyId} active={active} />}
-
-      {/* Overview view below. */}
-      {view === 'overview' && (
-      <>
       {/* Loading indicator while the data is being retrieved. */}
       {status === 'loading' && (
         <Loader label="Loading dashboard…" block testId="dashboard-loading" />
@@ -392,8 +342,12 @@ export function Dashboard({
           )}
         </div>
       )}
-      </>
-      )}
+
+      {/* Deeper insights rendered inline below the overview (no toggle): the
+          two screens were merged into a single continuous page. The Insights
+          component renders its own heading and skips its own loading/empty
+          chrome when there is nothing to show. */}
+      {hasData && <Insights familyId={familyId} active={active} />}
     </section>
   );
 }
