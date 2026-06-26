@@ -63,12 +63,15 @@ export function previousMonthKey(date: Date): string {
   return monthKey(prev);
 }
 
-/** Sum (in rupees) of expenses whose date falls in the given month key. */
-export function totalForMonth(expenses: Expense[], key: string): number {
+/** Sum (in rupees) of records whose date falls in the given month key. */
+export function totalForMonth(
+  items: { amount: number; date: Date }[],
+  key: string,
+): number {
   let cents = 0;
-  for (const expense of expenses) {
-    if (monthKey(expense.date) === key) {
-      cents += toCents(expense.amount);
+  for (const item of items) {
+    if (monthKey(item.date) === key) {
+      cents += toCents(item.amount);
     }
   }
   return fromCents(cents);

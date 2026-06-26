@@ -21,11 +21,12 @@ function fromCents(cents: number): number {
 }
 
 /**
- * Sum of the amounts of all expenses, computed in integer cents.
- * Returns 0 for an empty collection. Validates Requirement 4.1.
+ * Sum of the amounts of all records, computed in integer cents. Works on any
+ * collection of `{ amount: number }` (expenses or income). Returns 0 for an
+ * empty collection. Validates Requirement 4.1.
  */
-export function totalAmount(expenses: Expense[]): number {
-  const totalCents = expenses.reduce((sum, expense) => sum + toCents(expense.amount), 0);
+export function totalAmount(items: { amount: number }[]): number {
+  const totalCents = items.reduce((sum, item) => sum + toCents(item.amount), 0);
   return fromCents(totalCents);
 }
 

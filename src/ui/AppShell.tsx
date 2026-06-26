@@ -59,6 +59,7 @@ const NAV_LINKS: ReadonlyArray<{
 }> = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
   { to: '/expenses', label: 'Transactions', icon: 'receipt_long' },
+  { to: '/income', label: 'Income', icon: 'payments' },
   { to: '/insights', label: 'Insights', icon: 'leaderboard' },
   { to: '/recurring', label: 'Recurring', icon: 'autorenew' },
   { to: '/add', label: 'Add', icon: 'add_circle' },
@@ -67,7 +68,7 @@ const NAV_LINKS: ReadonlyArray<{
 
 /** Subset of {@link NAV_LINKS} shown in the mobile bottom nav (kept uncrowded). */
 const BOTTOM_NAV_LINKS = NAV_LINKS.filter((link) =>
-  ['/', '/expenses', '/insights', '/recurring', '/add', '/settings'].includes(
+  ['/', '/expenses', '/income', '/insights', '/recurring', '/add', '/settings'].includes(
     String(link.to),
   ),
 );

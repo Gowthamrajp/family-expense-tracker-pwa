@@ -73,6 +73,15 @@ service cloud.firestore {
         // only the editable fields plus updatedBy/updatedAt.
         allow update, delete: if isMember(familyId);
       }
+      // Income records: money coming IN to the family. Same access model as
+      // expenses — members of THIS family may read all, create only when
+      // attributed to themselves, and edit/delete any (Req 9.1–9.5).
+      match /incomes/{incomeId} {
+        allow read: if isMember(familyId);
+        allow create: if isMember(familyId)
+                      && request.resource.data.recordedBy == request.auth.uid;
+        allow update, delete: if isMember(familyId);
+      }
       match /categories/{categoryId} {
         allow read: if isMember(familyId);
         allow create: if isMember(familyId);

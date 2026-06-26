@@ -44,6 +44,7 @@ import {
 } from 'recharts';
 
 import { useExpenses } from '../state/useExpenses';
+import { useIncome } from '../state/useIncome';
 import { useCategories } from '../state/useCategories';
 import {
   groupByMonth,
@@ -160,6 +161,7 @@ export function Dashboard({
   // SHIM (tasks 28.4/31): `familyId` defaults to `null` so the hook stays idle
   // until `useFamily` supplies the active family id.
   const { expenses, status, retry } = useExpenses(familyId, active);
+  const { incomes } = useIncome(familyId, active);
 
   // Family-scoped categories, used to resolve each Expense's `categoryId` to a
   // human-readable Category name for the by-category chart (Req 7.2). The hook
@@ -178,6 +180,10 @@ export function Dashboard({
   // of legacy name strings or renames; expenses without a categoryId collapse
   // into a single "Uncategorized" bucket. Total/source/month are unchanged.
   const total = totalAmount(expenses);
+  // Income totals (money in) and the resulting net balance (in − out). Income
+  // uses the same cents-accurate summation as expenses.
+  const totalIncomeAmount = totalAmount(incomes);
+  const netBalance = Math.round((totalIncomeAmount - total) * 100) / 100;
   const byCategory = groupByReference(
     expenses,
     (expense) => expense.categoryId,
@@ -188,6 +194,9 @@ export function Dashboard({
   const byMonth = groupByMonth(expenses);
 
   const hasExpenses = expenses.length > 0;
+  // The summary tiles are meaningful when the family has any cash-flow data —
+  // income, expenses, or both — so an income-only family still sees them.
+  const hasData = hasExpenses || incomes.length > 0;
 
   return (
     <section
@@ -225,8 +234,8 @@ export function Dashboard({
         </div>
       )}
 
-      {/* Empty state once a successful read returns no expenses (Req 4.6). */}
-      {status === 'ready' && !hasExpenses && (
+      {/* Empty state once a successful read returns no income or expenses. */}
+      {status === 'ready' && !hasData && (
         <div className="glass-card p-card_padding flex flex-col items-center gap-3 text-center">
           <span className="material-symbols-outlined text-primary-container text-4xl" aria-hidden="true">
             account_balance_wallet
@@ -237,49 +246,85 @@ export function Dashboard({
         </div>
       )}
 
-      {/* Total + visualizations (Req 4.1–4.4). Rendered whenever data exists,
-          including the error case where prior data is retained (Req 4.7). */}
-      {hasExpenses && (
+      {/* Summary tiles + visualizations. The tiles render whenever there is any
+          cash-flow data (income and/or expenses); the spending charts render
+          only when there are expenses to chart. */}
+      {hasData && (
         <div className="grid grid-cols-12 gap-grid_gap">
-          {/* Hero: total family spend (wide glass tile). */}
-          <div className="col-span-12 glass-card glass-card-hover p-card_padding relative overflow-hidden">
+          {/* Hero row: total spend, total income, and net balance. */}
+          <div className="col-span-12 md:col-span-6 lg:col-span-4 glass-card glass-card-hover p-card_padding relative overflow-hidden">
             <h2 className="text-label-caps uppercase text-on-surface-variant mb-2">
               Total Family Spend
             </h2>
             <Money
               amount={total}
               testId="dashboard-total"
-              className="text-[clamp(40px,8vw,64px)] leading-none font-extrabold tracking-tighter text-white neon-glow"
+              className="text-[clamp(32px,6vw,48px)] leading-none font-extrabold tracking-tighter text-white neon-glow"
             />
-            <span className="material-symbols-outlined absolute right-6 top-6 text-primary-container/30 text-5xl" aria-hidden="true">
-              insights
+            <span className="material-symbols-outlined absolute right-6 top-6 text-error/30 text-4xl pointer-events-none" aria-hidden="true">
+              south_west
+            </span>
+          </div>
+          <div className="col-span-12 md:col-span-6 lg:col-span-4 glass-card glass-card-hover p-card_padding relative overflow-hidden">
+            <h2 className="text-label-caps uppercase text-on-surface-variant mb-2">
+              Total Income
+            </h2>
+            <Money
+              amount={totalIncomeAmount}
+              testId="dashboard-income-total"
+              className="text-[clamp(32px,6vw,48px)] leading-none font-extrabold tracking-tighter text-primary-container neon-glow"
+            />
+            <span className="material-symbols-outlined absolute right-6 top-6 text-primary-container/30 text-4xl pointer-events-none" aria-hidden="true">
+              north_east
+            </span>
+          </div>
+          <div className="col-span-12 lg:col-span-4 glass-card glass-card-hover p-card_padding relative overflow-hidden">
+            <h2 className="text-label-caps uppercase text-on-surface-variant mb-2">
+              Net Balance
+            </h2>
+            <Money
+              amount={netBalance}
+              testId="dashboard-net-balance"
+              className={`text-[clamp(32px,6vw,48px)] leading-none font-extrabold tracking-tighter neon-glow ${
+                netBalance >= 0 ? 'text-primary-container' : 'text-error'
+              }`}
+            />
+            <p className="text-xs text-on-surface-variant mt-2">
+              {netBalance >= 0 ? 'Income exceeds spending' : 'Spending exceeds income'}
+            </p>
+            <span className="material-symbols-outlined absolute right-6 top-6 text-primary-container/30 text-4xl pointer-events-none" aria-hidden="true">
+              account_balance
             </span>
           </div>
 
-          <div className="col-span-12 lg:col-span-7">
-            <ChartSection
-              title="Spending by category"
-              testId="dashboard-category-chart"
-              data={byCategory}
-              gradientId="grad-category"
-            />
-          </div>
-          <div className="col-span-12 lg:col-span-5">
-            <ChartSection
-              title="Spending by source"
-              testId="dashboard-source-chart"
-              data={bySource}
-              gradientId="grad-source"
-            />
-          </div>
-          <div className="col-span-12">
-            <ChartSection
-              title="Spending by month"
-              testId="dashboard-month-chart"
-              data={byMonth}
-              gradientId="grad-month"
-            />
-          </div>
+          {hasExpenses && (
+            <>
+              <div className="col-span-12 lg:col-span-7">
+                <ChartSection
+                  title="Spending by category"
+                  testId="dashboard-category-chart"
+                  data={byCategory}
+                  gradientId="grad-category"
+                />
+              </div>
+              <div className="col-span-12 lg:col-span-5">
+                <ChartSection
+                  title="Spending by source"
+                  testId="dashboard-source-chart"
+                  data={bySource}
+                  gradientId="grad-source"
+                />
+              </div>
+              <div className="col-span-12">
+                <ChartSection
+                  title="Spending by month"
+                  testId="dashboard-month-chart"
+                  data={byMonth}
+                  gradientId="grad-month"
+                />
+              </div>
+            </>
+          )}
         </div>
       )}
     </section>

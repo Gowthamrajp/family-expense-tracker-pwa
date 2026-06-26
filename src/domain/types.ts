@@ -339,6 +339,72 @@ export interface CategoryDocument {
 }
 
 /**
+ * Validated income input ready to persist. Income tracks money coming IN to the
+ * family (salary, interest, refunds, gifts, etc.), as a parallel to expenses.
+ *
+ * Constraints (enforced by domain validation), mirroring expenses:
+ * - amount: 0.01 .. 999,999,999.99 with at most 2 decimal places
+ * - date: 2000-01-01 .. today
+ * - description: 0..280 characters (may be empty)
+ *
+ * `source` is a free-text label for where the income came from (e.g. "Salary",
+ * "Interest", "Freelance"); it is intentionally lightweight (no managed
+ * Source/Category references) so income capture stays quick.
+ */
+export interface IncomeInput {
+  amount: number;
+  /** Free-text label for the income source (e.g. "Salary"). */
+  source: string;
+  date: Date;
+  description: string;
+}
+
+/**
+ * Full client-side income record as read back from the Data_Store, extending
+ * {@link IncomeInput} with identity and audit fields (mirrors {@link Expense}).
+ */
+export interface Income extends IncomeInput {
+  id: string;
+  /** FamilyMember uid of the submitter. */
+  recordedBy: string;
+  /** Denormalized display name of the recording member for list rendering. */
+  recordedByName?: string;
+  /** Creation timestamp recorded with the income. */
+  createdAt: Date;
+  /** Uid of the member who last edited the income, set on edit. */
+  updatedBy?: string;
+  /** Timestamp of the last edit, set on edit. */
+  updatedAt?: Date;
+}
+
+/** Document shape stored at `families/{familyId}/incomes/{incomeId}`. */
+export interface IncomeDocument {
+  amount: number;
+  source: string;
+  date: FirestoreTimestamp;
+  description: string;
+  recordedBy: string;
+  recordedByName?: string;
+  createdAt: FirestoreTimestamp;
+  updatedBy?: string;
+  updatedAt?: FirestoreTimestamp;
+}
+
+/** Default income source suggestions offered in the entry form. */
+export const DEFAULT_INCOME_SOURCES: readonly string[] = [
+  'Salary',
+  'Business',
+  'Interest',
+  'Dividend',
+  'Rental',
+  'Freelance',
+  'Refund',
+  'Gift',
+  'Other',
+] as const;
+
+
+/**
  * How a family's monthly budget target is expressed:
  * - `amount`: a fixed rupee cap per month.
  * - `percent`: a percentage of the PREVIOUS month's total spend.

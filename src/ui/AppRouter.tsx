@@ -36,6 +36,7 @@ import { Dashboard } from './Dashboard';
 import { ExpenseEntryForm } from './ExpenseEntryForm';
 import { ExpenseList } from './ExpenseList';
 import { FamilySettings } from './FamilySettings';
+import { Income } from './Income';
 import { Insights } from './Insights';
 import { Recurring } from './Recurring';
 import { RequireAuth } from './RequireAuth';
@@ -85,6 +86,14 @@ function RecurringRoute(): JSX.Element {
 }
 
 /**
+ * Income wrapper that supplies the active family id from {@link useFamily}.
+ */
+function IncomeRoute(): JSX.Element {
+  const { family } = useFamily();
+  return <Income familyId={family?.id ?? null} />;
+}
+
+/**
  * Declarative route table. Mount inside a router (e.g. `BrowserRouter`) that is
  * itself nested under `AuthProvider` and `FamilyProvider` so {@link RequireAuth}
  * and {@link RequireFamily} can read the Session and family.
@@ -110,6 +119,7 @@ export function AppRouter(): JSX.Element {
             <Route path="/expenses" element={<ExpenseListRoute />} />
             <Route path="/insights" element={<InsightsRoute />} />
             <Route path="/recurring" element={<RecurringRoute />} />
+            <Route path="/income" element={<IncomeRoute />} />
             <Route path="/add" element={<ExpenseEntryRoute />} />
             <Route path="/settings" element={<FamilySettings />} />
           </Route>
