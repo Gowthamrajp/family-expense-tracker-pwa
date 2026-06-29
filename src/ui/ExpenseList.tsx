@@ -385,7 +385,7 @@ function ExpenseListRow({
         <Money
           amount={amount}
           testId="expense-amount"
-          className="block font-mono-data text-base md:text-lg font-semibold text-white"
+          className="block font-mono-data text-base md:text-lg font-semibold text-error"
         />
         <span data-testid="expense-date" className="block text-[11px] md:text-xs text-on-surface-variant mt-0.5">
           {formatDate(date)}
@@ -928,7 +928,7 @@ function TransactionDetailsDrawer({
 
         <div className="glass-card p-card_padding flex flex-col items-center gap-2 text-center">
           <span className="text-label-caps uppercase text-on-surface-variant">Amount</span>
-          <Money amount={row.amount} className="text-[clamp(32px,6vw,44px)] leading-none font-extrabold tracking-tighter text-white neon-glow" />
+          <Money amount={row.amount} className="text-[clamp(32px,6vw,44px)] leading-none font-extrabold tracking-tighter text-error neon-glow" />
           <span className="text-sm text-on-surface-variant mt-1">{formatDate(row.date)}</span>
         </div>
 
