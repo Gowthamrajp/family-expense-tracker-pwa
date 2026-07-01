@@ -22,11 +22,13 @@ import {
 } from '../domain/insights';
 import { useAuth } from '../state/AuthProvider';
 import { useBudget } from '../state/useBudget';
+import { useScopedBudgets } from '../state/useScopedBudgets';
 import { useCategories } from '../state/useCategories';
 import { useExpenses } from '../state/useExpenses';
 import { useSubCategories } from '../state/useSubCategories';
 import { Loader } from './Loader';
 import { BudgetProgressCard } from './BudgetProgressCard';
+import { ScopedBudgetsCard } from './ScopedBudgetsCard';
 import { SpendingTrendCard } from './SpendingTrendCard';
 
 /** Props for {@link Insights}. */
@@ -45,6 +47,11 @@ export function Insights({
   const { categories } = useCategories(familyId);
   const { subCategories } = useSubCategories(familyId);
   const { budget } = useBudget(familyId, member);
+  const { budgets: scopedBudgets } = useScopedBudgets(familyId, member);
+
+  // Name lookups for the scoped-budget rows.
+  const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
+  const subCategoryNameById = new Map(subCategories.map((s) => [s.id, s.name]));
 
   const today = new Date();
   const curKey = currentMonthKey(today);
@@ -86,6 +93,14 @@ export function Insights({
             currentTotal={currentTotal}
             previousTotal={previousTotal}
             monthKey={curKey}
+          />
+
+          {/* Per-category / per-sub-category budgets set in Family settings. */}
+          <ScopedBudgetsCard
+            scopedBudgets={scopedBudgets}
+            expenses={expenses}
+            categoryNameById={categoryNameById}
+            subCategoryNameById={subCategoryNameById}
           />
 
           {/* Spending trend over time (month-on-month / year-on-year), scoped
