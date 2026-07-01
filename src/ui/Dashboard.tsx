@@ -32,14 +32,14 @@
  * {@link ../domain/aggregation}. Charts are wrapped in Recharts'
  * `ResponsiveContainer` and themed to the dark glass aesthetic.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { useExpenses } from '../state/useExpenses';
 import { useIncome } from '../state/useIncome';
 import { useCategories } from '../state/useCategories';
 import { useSubCategories } from '../state/useSubCategories';
 import { useSubSources } from '../state/useSubSources';
-import { totalAmount } from '../domain/aggregation';
+import { currentMonthKey, monthKey, totalForMonth } from '../domain/insights';
 import { Money } from './Money';
 import { Loader } from './Loader';
 import { Insights } from './Insights';
@@ -51,6 +51,17 @@ const EMPTY_STATE_MESSAGE = 'No expenses have been recorded yet.';
 
 /** Message shown when the dashboard data could not be loaded (Req 4.7). */
 const LOAD_ERROR_MESSAGE = 'Dashboard data could not be loaded.';
+
+/** Human label for a "YYYY-MM" key, e.g. "Jun 2026". */
+const MONTH_LABEL_FMT = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  year: 'numeric',
+});
+function monthLabel(key: string): string {
+  const [y, m] = key.split('-').map((s) => parseInt(s, 10));
+  if (!y || !m) return key;
+  return MONTH_LABEL_FMT.format(new Date(y, m - 1, 1));
+}
 
 /**
  * Render the spending dashboard with total, category/source/month charts, and
@@ -86,6 +97,9 @@ export function Dashboard({
     { id: string | null; name: string } | null
   >(null);
 
+  // The month the hero tiles are scoped to (defaults to the current month).
+  const [heroMonth, setHeroMonth] = useState<string>(() => currentMonthKey(new Date()));
+
   // Map categoryId -> display name so the category chart shows real family
   // Category names rather than ids. Recomputes when the category list changes,
   // keeping labels live as categories are added/renamed (Req 7.5).
@@ -94,17 +108,21 @@ export function Dashboard({
   // drill-down (null for the "Uncategorized" bucket).
   const categoryIdByName = new Map(categories.map((category) => [category.name, category.id]));
 
-  // Aggregations recompute on every render from the current expenses, so the
-  // total and charts always reflect the latest snapshot delivered by the live
-  // subscription (Req 7.5). The category grouping is keyed by `categoryId`
-  // (resolved to a name for display) so each category is one bucket regardless
-  // of legacy name strings or renames; expenses without a categoryId collapse
-  // into a single "Uncategorized" bucket. Total/source/month are unchanged.
-  const total = totalAmount(expenses);
-  // Income totals (money in) and the resulting net balance (in − out). Income
-  // uses the same cents-accurate summation as expenses.
-  const totalIncomeAmount = totalAmount(incomes);
+  // Hero tiles are scoped to the selected month (defaults to current). Spend,
+  // income, and the resulting net balance are all computed for that month.
+  const total = totalForMonth(expenses, heroMonth);
+  const totalIncomeAmount = totalForMonth(incomes, heroMonth);
   const netBalance = Math.round((totalIncomeAmount - total) * 100) / 100;
+
+  // Months that have any spend or income, plus the current month, newest-first,
+  // for the hero month selector.
+  const heroMonthOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of expenses) set.add(monthKey(e.date));
+    for (const i of incomes) set.add(monthKey(i.date));
+    set.add(currentMonthKey(new Date()));
+    return [...set].sort((a, b) => b.localeCompare(a));
+  }, [expenses, incomes]);
 
   const hasExpenses = expenses.length > 0;
   // The summary tiles are meaningful when the family has any cash-flow data —
@@ -164,11 +182,29 @@ export function Dashboard({
           only when there are expenses to chart. */}
       {hasData && (
         <div className="grid grid-cols-12 gap-4 md:gap-grid_gap">
-          {/* Hero row: total spend, total income, and net balance. Compact and
-              2-up on mobile, expanding to thirds on large screens. */}
+          {/* Month selector scoping the three hero tiles. */}
+          <div className="col-span-12 flex items-center justify-between gap-2">
+            <span className="text-label-caps uppercase tracking-widest text-on-surface-variant">
+              Summary
+            </span>
+            <select
+              value={heroMonth}
+              onChange={(e) => setHeroMonth(e.target.value)}
+              aria-label="Summary month"
+              data-testid="dashboard-hero-month"
+              className="ghost-input px-3 py-1.5 text-sm shrink-0"
+            >
+              {heroMonthOptions.map((key) => (
+                <option key={key} value={key}>{monthLabel(key)}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Hero row: total spend, total income, and net balance for the
+              selected month. Compact and 2-up on mobile, thirds on large. */}
           <div className="col-span-6 lg:col-span-4 glass-card glass-card-hover p-4 md:p-card_padding relative overflow-hidden">
             <h2 className="text-label-caps uppercase text-on-surface-variant mb-1 md:mb-2">
-              Total Spend
+              Spend
             </h2>
             <Money
               amount={total}
@@ -181,7 +217,7 @@ export function Dashboard({
           </div>
           <div className="col-span-6 lg:col-span-4 glass-card glass-card-hover p-4 md:p-card_padding relative overflow-hidden">
             <h2 className="text-label-caps uppercase text-on-surface-variant mb-1 md:mb-2">
-              Total Income
+              Income
             </h2>
             <Money
               amount={totalIncomeAmount}
